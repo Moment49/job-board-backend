@@ -1,0 +1,14 @@
+version: '3.8'
+services:
+    api:
+      build: .
+      context: contextPath
+      dockerfile: Dockerfile
+    db:
+      image: postgresql
+      container_name: web_db
+    cache:
+      image: redis
+      container_name: redis_cache
+    celery:
+

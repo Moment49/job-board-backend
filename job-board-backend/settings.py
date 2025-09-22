@@ -6,7 +6,8 @@ import environ
 # Initialise environment variables
 env = environ.Env(
     # set casting, default value
-    DEBUG=(bool, False)
+    DEBUG=(bool, False),
+    CORS_ALLOW_ALL_ORIGINS=(bool, False)
 )
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -76,7 +77,7 @@ WSGI_APPLICATION = 'job-board-backend.wsgi.application'
 # Database
 DATABASES = {
     # The db() method is an alias for db_url().
-    'extra': {
+    'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': env('DB_NAME'),
         'USER': env('DB_USER'),
@@ -85,7 +86,7 @@ DATABASES = {
         'PORT': env('DB_PORT'),
     },
 
-    'default': env.db('SQLITE_URL')
+    'extra': env.db('SQLITE_URL')
 }
 
 # Password validation
