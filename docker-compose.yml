@@ -1,14 +1,58 @@
 version: '3.8'
 services:
-    api:
-      build: .
-      context: contextPath
-      dockerfile: Dockerfile
-    db:
-      image: postgresql
-      container_name: web_db
-    cache:
-      image: redis
-      container_name: redis_cache
-    celery:
+  # Django Backend
+  backend:
+    build: .
+    image: momentum49/job-board-backend:1.0.0
+    ports:
+      - "8000:8000"
+    container_name: web_api
+    command:  python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+      cache:
+        condition: service_started
+  # Postgres Database
+  db:
+    image: postgresql
+    container_name: web_db
+    volumes:
+      - db-data:var/lib/postgresql/data
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+  # Cache - Redis
+  cache:
+    image: redis
+    container_name: redis_cache
+    restart: unless-stopped
+  
+  # Celery
+  celery:
+    build: .
+    command: celery -A job-board-backend.celery worker --loglevel=info
+    restart: always
+    container_name: celery
+    environment:
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+    volumes:
+      -.:/app
+    depends_on:
+      - db
+      - cache
+      - backend
+
+volumes:
+  db-data:
 

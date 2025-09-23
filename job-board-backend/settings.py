@@ -40,7 +40,9 @@ INSTALLED_APPS = [
     'corsheaders',
     'api.apps.ApiConfig',
     'drf_yasg',
-    'drf_spectacular'
+    'drf_spectacular',
+    'django_celery_beat',
+    'sendgrid',
 ]
 
 MIDDLEWARE = [
@@ -77,16 +79,16 @@ WSGI_APPLICATION = 'job-board-backend.wsgi.application'
 # Database
 DATABASES = {
     # The db() method is an alias for db_url().
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': env('DB_NAME'),
-        'USER': env('DB_USER'),
-        'PASSWORD': env('DB_PASSWORD'),
-        'HOST': env('DB_HOST'),
-        'PORT': env('DB_PORT'),
-    },
+    # 'extra': {
+    #     'ENGINE': 'django.db.backends.postgresql',
+    #     'NAME': env('POSTGRES_DB'),
+    #     'USER': env('POSTGRES_USER'),
+    #     'PASSWORD': env('POSTGRES_PASSWORD'),
+    #     'HOST': env('POSTGRES_HOST'),
+    #     'PORT': env('DB_PORT'),
+    # },
 
-    'extra': env.db('SQLITE_URL')
+    'default': env.db('SQLITE_URL')
 }
 
 # Password validation
@@ -143,6 +145,7 @@ CORS_ALLOW_METHODS = (
     "PUT",
 )
 
+# DRF SPECTACULAR FOR SWAGGER DOCS
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
@@ -154,12 +157,29 @@ SPECTACULAR_SETTINGS = {
     'VERSION': '1.0.0',
 }
 
+
+
+# ACTS AS CACHE AND BROKER FOR CELERY TASKS
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://127.0.0.1:6379/1",
+        "LOCATION": env('CACHE_URL'),
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
     }
 }
+
+# pick which cache from the CACHES setting.
+CELERY_CACHE_BACKEND = 'default'
+
+# CELERY settings - This is the message broker that will be used to send and receive messages from the celery worker
+CELERY_BROKER_URL = env("CELERY_BROKER_URL")
+
+CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND")
+
+# EMAIL SERVICE CONFIGURATION
+EMAIL_BACKEND = "sendgrid_backend.SendgridBackend"
+SENDGRID_API_KEY = env("SENDGRID_API_KEY")
+SENDGRID_SANDBOX_MODE_IN_DEBUG = False
+DEFAULT_FROM_EMAIL= env('DEFAULT_FROM_EMAIL')
