@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'django_celery_beat',
     'sendgrid',
+    'rest_framework_simplejwt',
 ]
 
 MIDDLEWARE = [
@@ -127,6 +128,13 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Media Settings
+MEDIA_ROOT =  os.path.join(BASE_DIR, 'media')
+MEDIA_URL = '/media/'
+
+# Set the Custom User Model
+AUTH_USER_MODEL = "api.CustomUser"
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
@@ -148,6 +156,9 @@ CORS_ALLOW_METHODS = (
 # DRF SPECTACULAR FOR SWAGGER DOCS
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    )
 }
 
 SPECTACULAR_SETTINGS = {

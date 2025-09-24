@@ -1,3 +1,179 @@
 from django.db import models
-
+from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.base_user import BaseUserManager
+import uuid
+from django.conf import settings
 # Create your models here.
+
+
+class CustomUserManager(BaseUserManager):
+    def create_user(self, email, first_name=None, last_name=None, password=None, phone_number=None):
+        if not email:
+            raise ValueError("Email is required")
+        
+        if not first_name:
+            raise ValueError("First name is required")
+        
+        if not last_name:
+            raise ValueError("Last name is required")
+        
+        if not password:
+            raise ValueError("Password is required")
+
+        # Normalize the email address by lowercasing the domain part of it.
+        user = self.model(email=self.normalize_email(email), 
+                          first_name=first_name,
+                          last_name=last_name,
+                          phone_number=phone_number)
+        # Hash the password using the default password hasher
+        user.set_password(password)
+
+        user.save(using=self._db)
+
+        return user
+    
+    def create_superuser(self, email, first_name, last_name, password):
+        user = self.create_user(
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            password=password
+        )
+        user.is_staff = True
+        user.is_superuser = True
+        user.save(using=self._db)
+
+        return user
+
+
+
+class CustomUser(AbstractUser):
+
+    ROLES = (
+        ("ADMIN", "Admin"),
+        ("USER", "User"),
+    )
+
+    # Add any additional fields if needed
+    user_id = models.UUIDField(primary_key=True,  default=uuid.uuid4, editable=False)
+    username = models.CharField(max_length=150, unique=False, blank=True, null=True)
+    email = models.EmailField(unique=True, blank=False, null=False)
+    first_name = models.CharField(max_length=30, blank=False, null=False)
+    last_name = models.CharField(max_length=30, blank=False, null=False)
+    phone_number = models.CharField(max_length=15, blank=True, null=True)
+    role = models.CharField(max_length=10, choices=ROLES, default="USER")
+
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = []
+
+    objects = CustomUserManager()
+
+    def get_full_name(self):
+        """This will get the full name of the user"""
+        return f"{self.first_name} {self.first_name}"
+    
+    def __str__(self):
+        return f"{self.email}"
+
+class AccountSettings(models.Model):
+    settings_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    is_deactivated = models.BooleanField(default=False)
+    is_profile_public = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Settings {self.settings_id}"
+
+class Profile(models.Model):
+    profile_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    bio = models.TextField(blank=True, null=True)
+    profile_picture = models.ImageField(upload_to='media/', blank=True, null=True)
+    interests = models.CharField(max_length=200, blank=True, null=True)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    account_settings = models.OneToOneField(AccountSettings, on_delete=models.CASCADE, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Profile of {self.user.email}"
+    
+
+class JobCategory(models.Model):
+    JOB_CATEGORY_TYPES = [
+    ("Location", "Location"),
+    ("Type", "Type"),
+    ("Industry", "Industry")
+    ]
+    job_category_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    job_category_name = models.CharField(max_length=45, blank=True, null=True)
+    job_category_type = models.CharField(max_length=20, choices=JOB_CATEGORY_TYPES, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.job_category_name} - {self.job_category_type}"
+
+class JobPost(models.Model):
+    job_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    job_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    job_title = models.CharField(max_length=100, blank=False, null=False)
+    job_description = models.TextField(blank=False, null=False)
+    company_name = models.CharField(max_length=100, blank=False, null=False)
+    salary = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='job_posts')
+    job_category = models.ManyToManyField(JobCategory)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.job_title} at {self.company_name}"
+
+class JobApplication(models.Model):
+    JOB_APPLICATION_SUBMISSION_STATUS = [
+    ("Submitted", "Submitted"),
+    ("Incomplete", "Incomplete"),
+    ]
+    job_app_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    cover_letter = models.TextField(blank=True, null=True)
+    resume_cv = models.FileField(upload_to="resume/", blank=True, null=True)
+    institution_name = models.CharField(max_length=100, blank=True, null=True)
+    field_of_study = models.CharField(max_length=100, blank=True, null=True)
+    grade = models.DecimalField(max_digits=3, decimal_places=2, blank=True, null=True)
+    degree_Qualification = models.CharField(max_length=200, blank=True, null=True)
+    degree_start_date = models.DateField()
+    deree_end_date  = models.DateField()
+    degree_Certificate = models.ImageField(upload_to="certificates/", blank=True, null=True)
+    availability = models.DateField()
+    job_application_submission = models.CharField(max_length=15, choices=JOB_APPLICATION_SUBMISSION_STATUS, default="Incomplete", blank=True, null=True)
+    job_application_submission_status = models.BooleanField(default=False)
+    application_review_status = models.BooleanField(default=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='job_applications')
+    job_post = models.ForeignKey(JobPost, on_delete=models.SET_NULL, related_name="job_applications", null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.job_app_id} at {self.user.email}"
+
+class JobApplicationReview(models.Model):
+    JOB_APPLICATION_REVIEW_STATUS = [
+            ("Reviewed", "Reviewed"),
+            ("Not Reviewed", "Not Reviewed"),
+            ]
+    
+    job_app_review_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    reason = models.TextField(blank=False, null=False)
+    reviewed_at = models.DateTimeField()
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name="job_application_review", null=True)
+    job_applicatiion_review = models.CharField(max_length=20, choices=JOB_APPLICATION_REVIEW_STATUS, default="Not Reviewed", blank=False, null=False)
+    job_applicatiion_review_status = models.BooleanField(default=False)
+    job_app = models.ForeignKey(JobApplication, on_delete=models.CASCADE, related_name="job_application_reviews")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Review {self.job_app_review_id} for job application {self.job_app.job_app_id}"
+    
+
+
+
+
+
