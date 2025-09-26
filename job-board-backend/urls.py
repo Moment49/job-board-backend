@@ -7,10 +7,12 @@ from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from django.shortcuts import redirect
+from rest_framework_simplejwt.authentication import JWTAuthentication
+
 
 schema_view = get_schema_view(
    openapi.Info(
-      title="TITLE': 'JOB BOARD API",
+      title="JOB BOARD API",
       default_version='v1',
       description="This is a backend system for a Job Board platform  built with Django and Djangorestframework designed to handle job postings, applications, and role-based access control. The project emphasizes secure authentication, efficient database design, and optimized job search queries",
       terms_of_service="https://www.google.com/policies/terms/",
@@ -19,6 +21,7 @@ schema_view = get_schema_view(
    ),
    public=True,
    permission_classes=(permissions.AllowAny,),
+   authentication_classes=[JWTAuthentication],
 )
 
 

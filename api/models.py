@@ -85,7 +85,7 @@ class CustomUser(AbstractUser):
 
 class AccountSettings(models.Model):
     settings_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    is_deactivated = models.BooleanField(default=False)
+    is_disabled = models.BooleanField(default=False)
     is_profile_public = models.BooleanField(default=False)
 
     def __str__(self):
@@ -94,7 +94,7 @@ class AccountSettings(models.Model):
 class Profile(models.Model):
     profile_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     bio = models.TextField(blank=True, null=True)
-    profile_picture = models.ImageField(upload_to='media/', blank=True, null=True)
+    profile_picture = models.ImageField(upload_to='profile/', blank=True, null=True)
     interests = models.CharField(max_length=200, blank=True, null=True)
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     account_settings = models.OneToOneField(AccountSettings, on_delete=models.CASCADE, null=True, blank=True)
@@ -108,12 +108,7 @@ class Profile(models.Model):
                             "email":self.user.email,
                             "bio": self.bio,
                             "interests":self.interests,
-                            "profile_picture":self.profile_picture.url if self.profile_picture else None,
-                            "account_settings":{
-                                "is_profile_public":self.account_settings.is_profile_public,
-                                "is_deactivated":self.account_settings.is_deactivated,
-                            }
-                        }
+                            "profile_picture":self.profile_picture.url if self.profile_picture else None}
         return profile_data
 
 
@@ -137,7 +132,6 @@ class JobCategory(models.Model):
         return f"{self.job_category_name} - {self.job_category_type}"
 
 class JobPost(models.Model):
-    job_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     job_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     job_title = models.CharField(max_length=100, blank=False, null=False)
     job_description = models.TextField(blank=False, null=False)
@@ -168,7 +162,6 @@ class JobApplication(models.Model):
     degree_Certificate = models.ImageField(upload_to="certificates/", blank=True, null=True)
     availability = models.DateField()
     job_application_submission = models.CharField(max_length=15, choices=JOB_APPLICATION_SUBMISSION_STATUS, default="Incomplete", blank=True, null=True)
-    job_application_submission_status = models.BooleanField(default=False)
     application_review_status = models.BooleanField(default=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='job_applications')
     job_post = models.ForeignKey(JobPost, on_delete=models.SET_NULL, related_name="job_applications", null=True)
@@ -186,10 +179,9 @@ class JobApplicationReview(models.Model):
     
     job_app_review_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     reason = models.TextField(blank=False, null=False)
-    reviewed_at = models.DateTimeField()
+    reviewed_at = models.DateTimeField(auto_now_add=False)
     reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name="job_application_review", null=True)
     job_applicatiion_review = models.CharField(max_length=20, choices=JOB_APPLICATION_REVIEW_STATUS, default="Not Reviewed", blank=False, null=False)
-    job_applicatiion_review_status = models.BooleanField(default=False)
     job_app = models.ForeignKey(JobApplication, on_delete=models.CASCADE, related_name="job_application_reviews")
     created_at = models.DateTimeField(auto_now_add=True)
 

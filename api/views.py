@@ -6,9 +6,11 @@ from django.views.decorators.cache import cache_page
 from django.core.cache import cache
 from django.conf import settings
 from rest_framework import generics
+from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
-from .serializers import RegisterUserSerializer, AccountVerificationSerializer, LoginSerialzer, \
-    LogoutSerializer, AdminUserSerializer, ProfileSerializer, AccountSettingsSeerializer
+from .serializers import (RegisterUserSerializer, AccountVerificationSerializer, LoginSerialzer, 
+                        LogoutSerializer, AdminUserSerializer, ProfileSerializer, AccounntSettingDeactivationSerializer,
+                        JobCategorySerializer)
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.sites.shortcuts import get_current_site
 from django.urls import reverse
@@ -23,17 +25,22 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
 from rest_framework.decorators import permission_classes, authentication_classes
 from django.contrib.auth import authenticate
-from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth.models import Group
 from rest_framework.exceptions import PermissionDenied
 from django.db.models import Q
 from .permissions import IsAdminManagingUsers
+from .models import Profile, AccountSettings, JobApplication, JobApplicationReview, JobCategory, JobPost
+import logging
+
+# Set the logger entry point
+logger = logging.getLogger(__name__)
 
 CustomUser = get_user_model()
 
 
 class UserRegisterView(generics.CreateAPIView):
-    queryset = CustomUser
+    queryset = CustomUser.objects.all()
     serializer_class = RegisterUserSerializer
 
     def create(self, request, *args, **kwargs):
@@ -110,7 +117,13 @@ def login_view(request):
                 if not user.is_active:
                     # Raise the error for user account not verified 
                     raise AuthenticationFailed('User account not verified. Please check your email for verification link')
-                
+                # Check if user account settings is deactivated
+                user_profile = Profile.objects.get(user=user)
+                if  user_profile.account_settings.is_disabled and user.role == "ADMIN":
+                    raise PermissionDenied("Sorry Account disabled. Kindly contact application owner to renable")
+                if user_profile.account_settings.is_disabled and user.role != "ADMIN":
+                    raise PermissionDenied("Sorry Account disabled. Kindly contact an admin to renable")
+    
                 # Check the role of the user
                 if user.role == "ADMIN":
                     # Create the access and refresh token for user and add the custom claims
@@ -158,6 +171,14 @@ def logout_view(request):
 
 
 class AdminUserViewSet(ModelViewSet):
+    """
+    Endpoint: admin/users/
+
+    **Access:** Admin users only.
+
+    Returns all users in the system (including admins) for management purposes.
+    Supports listing, retrieving, creating, updating, and deleting users.
+    """
     # Endpoint to create users by admins 
     permission_classes = [IsAuthenticated, IsAdminManagingUsers]
     authentication_classes = [JWTAuthentication]
@@ -203,21 +224,135 @@ class AdminUserViewSet(ModelViewSet):
         return Response({"detail":f"User {instance.get_full_name()} deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
     
 
-class  ProfileView(APIView):
+class ProfileListUpdateView(APIView):
     permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        profile = request.user.profile
+        serializer = ProfileSerializer(profile)
+        return Response({"data":serializer.data}, status=status.HTTP_200_OK)
+
+    def put(self, request):
+        profile = request.user.profile
+        data = request.data.copy()
+        # Ensure is_deactivated is never updated
+        data.get('account_settings', {}).pop('is_disabled', None)
+
+        serializer = ProfileSerializer(profile, data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        if request.data.get("profile_picture"):
+            detail_msg = "Profile updated successfully with profile picture."
+        else:
+            detail_msg = "Profile updated successfully without profile picture."
+
+        return Response({
+            "detail": detail_msg,
+            "profile": serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+
+class AccountDeactivateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request,  *args, **kwargs):
+        """
+        Deactivate the account settings.
+        - Users can deactivate only their own account.
+        - Admins can deactivate any account.
+        """
+       # Default: logged-in user's profile
+        userprofile = request.user.profile
+        account_setting = userprofile.account_settings
+
+        user_id = request.data.get('user_id')
+        # check if user exists
+        user = get_object_or_404(CustomUser, id=user_id)
+        if user_id:
+            userprofile = user.profile
+            account_setting = userprofile.account_settings
+
+            if request.user.role != "ADMIN":
+                return Response(
+                    {"detail": "You do not have permission to disable other users."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+        if request.user.role == 'ADMIN' and user.role == "ADMIN":
+            return Response(
+                {"detail": "You cannot disable another admin account."},
+                status=status.HTTP_403_FORBIDDEN)
+        
+       # For regular users, ensure they are only deactivating themselves
+        if request.user != userprofile.user:
+            return Response(
+                {"detail": "You cannot disable another user's account."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        serializer = AccounntSettingDeactivationSerializer(
+            account_setting,
+            data={"is_deactivated":True},
+            partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({"detail": "Account has been deactivated successfully."}, status=200)
+
+    
+class JobCategoryViewSet(ModelViewSet):
+    queryset = JobCategory.objects.all()
+    serializer_class = JobCategorySerializer
+
+    def perform_create(self, serializer):
+        if self.request.user.role != "ADMIN":
+            raise PermissionDenied("Sorry only admins can add categories")
+        return serializer.save()
+    
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+
+        # Check if the user is an admin else deny access
+        if self.request.user.role != "ADMIN":
+            raise PermissionDenied("Sorry only admins can update categories")
+        
+        self.perform_update(serializer)
+
+        return Response({"message":"category updated successfully", "data":serializer.data},status=status.HTTP_200_OK)
+    
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        # Check if the user is an admin else deny access
+        if self.request.user.role != "ADMIN":
+            raise PermissionDenied("Sorry only admins can update categories")
+        self.perform_destroy(instance)
+        return Response({"message":f"category name `{instance.job_category_name}` deleted successfully"},status=status.HTTP_204_NO_CONTENT)
+    
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+
+class JobPostViewSet(ModelViewSet):
+    # View for Job Posts only admins can create update or delete all users can view
+    queryset = JobPost.objects.all()
+    
+
+
+class JobApplicationViewSet(ModelViewSet):
+    # Views for All users to apply to Job Admins cannot apply to job
+    queryset = JobApplication.objects.all()
+
+
+class JobApplicationReviewView(APIView):
+    # Reviews for Application. Admins to have access to this view only
     def get(self, request):
         ...
     def put(self, request):
         ...
-
-class JobPostViewSet(ModelViewSet):
-    # View for Job Posts only admins can create update or delete all users can view
-    ...
-
-class JobApplicationViewSet(ModelViewSet):
-    # Views for All users to apply to Job Admins cannot apply to job
-    ...
-
-class JobApplicationReviewView(APIView):
-    # Reviews for Application. Admins to have access to this view only
-    ...

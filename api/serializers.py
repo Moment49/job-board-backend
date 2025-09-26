@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from .models import Profile, AccountSettings
+from .models import Profile, AccountSettings, JobCategory, JobPost, JobApplication, JobApplicationReview
+from django.db.models import Q
 
 CustomUser = get_user_model()
 
@@ -158,32 +159,82 @@ class AdminUserSerializer(serializers.ModelSerializer):
         return instance
 
 
-class AccountSettingsSeerializer(serializers.ModelSerializer):
+class AccounntSettingDeactivationSerializer(serializers.ModelSerializer):
     class Meta:
         model = AccountSettings
-        fields = ['settings_id', "is_deactivated", "is_profile_public"]
+        fields = ['settings_id', "is_disabled"]
+        read_only_fields = ['settings_id']
+
+class AccountSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AccountSettings
+        fields = ['settings_id', "is_disabled", "is_profile_public"]
+        read_only_fields = ['settings_id','is_disabled'] 
 
 
 class ProfileSerializer(serializers.ModelSerializer):
+    account_settings = AccountSettingsSerializer(read_only=True)
     bio = serializers.CharField(write_only=True)
     profile_picture = serializers.ImageField(write_only=True)
     get_profile_data = serializers.SerializerMethodField()
     class Meta:
         model = Profile
-        fields = ['profile_id', 'bio', 'interests', 'profile_picture', "get_profile_data"]
+        fields = ['profile_id', 'bio', 'interests', 'profile_picture', "get_profile_data", "account_settings"]
 
     def get_profile_data(self, obj):
         return obj.get_profile_data()
     
     
     def update(self, instance, validated_data):
+        profile_pic = validated_data.get('profile_picture', instance.profile_picture)
         instance.bio = validated_data.get('bio', instance.bio)
-        instance.bio = validated_data.get('interest', instance.bio)
-        # Check the account settings for profile pic  is activated before updating the profile picture
-        # Note use the object instance to check if the profile pictrue is set before updating
-        instance.profile_picture = validated_data.get('profile_picture', instance.profile_picture)
+        instance.interests = validated_data.get('interests', instance.interests)
+        print(instance.bio)
+        if profile_pic:
+            # Only update if account_settings allows it
+            if instance.account_settings.is_profile_public == False:
+                instance.profile_picture = profile_pic
+                instance.account_settings.is_profile_public = True
+                instance.account_settings.save()
 
         instance.save()
-        print(instance)
+       
         return instance
+
+class JobCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = JobCategory
+        fields = ['job_category_id', 'job_category_name', 'job_category_type']
+        read_only_fields = ['job_category_id']
+
+    def validate(self, data):
+        job_category_type = data.get('job_category_type')
+        job_category_name = data.get('job_category_name')
+
+        if job_category_type not in ['Location', 'Industry', 'Type']:
+            raise serializers.ValidationError("Sorry you must select any of these 3 Job category Type ('Location', 'Industry', 'Type')")
+        if not job_category_name:
+            raise serializers.ValidationError("Sorry Job category name cannot be empty")
         
+        return data
+    
+    def create(self, validated_data):
+        job_category_name = validated_data.pop('job_category_name')
+        job_category_type = validated_data.pop('job_category_type')
+    
+        job_cat = JobCategory.objects.filter(job_category_name=job_category_name, job_category_type=job_category_type)
+        if job_cat.exists():
+            raise serializers.ValidationError("A job category with this name and type already exists.")
+        
+        job_cat = JobCategory.objects.create(job_category_type=job_category_type, job_category_name=job_category_name)
+        
+        job_cat.save()
+        return job_cat
+
+    def update(self, instance, validated_data):
+        instance.job_category_name = validated_data.get('job_category_name', instance.job_category_name)
+        instance.job_category_type = validated_data.get('job_category_type', instance.job_category_type)
+
+        instance.save()
+        return instance
+    

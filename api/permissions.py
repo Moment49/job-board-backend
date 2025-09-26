@@ -24,3 +24,4 @@ class IsAdminManagingUsers(BasePermission):
             print(request.user)
             raise PermissionDenied("Sorry you cannot delete or modify another admin user data")
         return True
+    
