@@ -7,7 +7,7 @@ from django.conf import settings
 
 
 class CustomUserManager(BaseUserManager):
-    def create_user(self, email, first_name=None, last_name=None, password=None, phone_number=None):
+    def create_user(self, email, first_name=None, last_name=None, password=None, phone_number=None, role=None):
         if not email:
             raise ValueError("Email is required")
         
@@ -24,23 +24,26 @@ class CustomUserManager(BaseUserManager):
         user = self.model(email=self.normalize_email(email), 
                           first_name=first_name,
                           last_name=last_name,
-                          phone_number=phone_number)
+                          phone_number=phone_number,
+                          role=role)
         # Hash the password using the default password hasher
         user.set_password(password)
-
+        user.is_active = False
         user.save(using=self._db)
 
         return user
     
-    def create_superuser(self, email, first_name, last_name, password):
+    def create_superuser(self, email, first_name, last_name, password, role):
         user = self.create_user(
             email=email,
             first_name=first_name,
             last_name=last_name,
-            password=password
+            password=password,
+            role=role
         )
         user.is_staff = True
         user.is_superuser = True
+        user.is_active = True
         user.save(using=self._db)
 
         return user
@@ -55,22 +58,27 @@ class CustomUser(AbstractUser):
     )
 
     # Add any additional fields if needed
-    user_id = models.UUIDField(primary_key=True,  default=uuid.uuid4, editable=False)
+    id = models.UUIDField(primary_key=True,  default=uuid.uuid4, editable=False)
     username = models.CharField(max_length=150, unique=False, blank=True, null=True)
     email = models.EmailField(unique=True, blank=False, null=False)
     first_name = models.CharField(max_length=30, blank=False, null=False)
     last_name = models.CharField(max_length=30, blank=False, null=False)
     phone_number = models.CharField(max_length=15, blank=True, null=True)
     role = models.CharField(max_length=10, choices=ROLES, default="USER")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
 
     objects = CustomUserManager()
 
+    class Meta:
+        ordering = ['-created_at', 'role']
+
     def get_full_name(self):
         """This will get the full name of the user"""
-        return f"{self.first_name} {self.first_name}"
+        return f"{self.first_name} {self.last_name}"
     
     def __str__(self):
         return f"{self.email}"
@@ -92,6 +100,22 @@ class Profile(models.Model):
     account_settings = models.OneToOneField(AccountSettings, on_delete=models.CASCADE, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def get_profile_data(self):
+        # Get the profile data to be displayed and user for updating  ser data
+        profile_data = { "first_name":self.user.first_name, 
+                            "last_name": self.user.last_name,
+                            "email":self.user.email,
+                            "bio": self.bio,
+                            "interests":self.interests,
+                            "profile_picture":self.profile_picture.url if self.profile_picture else None,
+                            "account_settings":{
+                                "is_profile_public":self.account_settings.is_profile_public,
+                                "is_deactivated":self.account_settings.is_deactivated,
+                            }
+                        }
+        return profile_data
+
 
     def __str__(self):
         return f"Profile of {self.user.email}"

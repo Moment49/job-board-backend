@@ -40,10 +40,10 @@ INSTALLED_APPS = [
     'corsheaders',
     'api.apps.ApiConfig',
     'drf_yasg',
-    'drf_spectacular',
     'django_celery_beat',
     'sendgrid',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist'
 ]
 
 MIDDLEWARE = [
@@ -161,13 +161,6 @@ REST_FRAMEWORK = {
     )
 }
 
-SPECTACULAR_SETTINGS = {
-    'TITLE': 'JOB BOARD API',
-    'DESCRIPTION': 'This is a backend system for a Job Board platform, \
-        built with Django and Djangorestframework designed to handle job postings, applications, and role-based access control. The project emphasizes secure authentication, efficient database design, and optimized job search queries.',
-    'VERSION': '1.0.0',
-}
-
 
 
 # ACTS AS CACHE AND BROKER FOR CELERY TASKS
@@ -194,3 +187,50 @@ EMAIL_BACKEND = "sendgrid_backend.SendgridBackend"
 SENDGRID_API_KEY = env("SENDGRID_API_KEY")
 SENDGRID_SANDBOX_MODE_IN_DEBUG = False
 DEFAULT_FROM_EMAIL= env('DEFAULT_FROM_EMAIL')
+
+
+# LOGGER SETTINGS
+# LOGGING = {
+#     'version': 1,
+#     'disable_existing_loggers': False,
+#     'formatters': {
+#         'verbose': {
+#             'format': '{levelname} {asctime} {name} {message}',
+#             'style': '{',
+#         },
+#         'simple': {
+#             'format': '{levelname} {message}',
+#             'style': '{',
+#         },
+#     },
+#     'handlers': {
+#         'file': {
+#             'level': 'DEBUG',
+#             'class': 'logging.FileHandler',
+#             'filename': 'debug.log',
+#             'formatter': 'verbose',
+#         }
+#     },
+#     'loggers': {
+#         'django': {
+#             'handlers': ['file'],
+#             'level': 'DEBUG',
+#             'propagate': True,
+#         },
+#     },
+# }
+
+
+from datetime import timedelta
+
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=120),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    'SLIDING_TOKEN_LIFETIME': timedelta(days=30),
+    'SLIDING_TOKEN_REFRESH_LIFETIME_LATE_USER': timedelta(days=1),
+    'SLIDING_TOKEN_LIFETIME_LATE_USER': timedelta(days=30),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True
+}
+
