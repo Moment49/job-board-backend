@@ -85,14 +85,14 @@ DATABASES = {
     # The db() method is an alias for db_url().
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': env('POSTGRES_DB'),
-        'USER': env('POSTGRES_USER'),
-        'PASSWORD': env('POSTGRES_PASSWORD'),
-        'HOST': env('POSTGRES_HOST'),
+        'NAME': env('DB_NAME'),
+        'USER': env('DB_USER'),
+        'PASSWORD': env('DB_PASSWORD'),
+        'HOST': env('DB_HOST'),
         'PORT': env('DB_PORT'),
     },
 
-    # 'extra': env.db('SQLITE_URL')
+    'extra': env.db('SQLITE_URL')
 }
 
 # Password validation
