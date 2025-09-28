@@ -83,16 +83,16 @@ WSGI_APPLICATION = 'job-board-backend.wsgi.application'
 # Database
 DATABASES = {
     # The db() method is an alias for db_url().
-    # 'extra': {
-    #     'ENGINE': 'django.db.backends.postgresql',
-    #     'NAME': env('POSTGRES_DB'),
-    #     'USER': env('POSTGRES_USER'),
-    #     'PASSWORD': env('POSTGRES_PASSWORD'),
-    #     'HOST': env('POSTGRES_HOST'),
-    #     'PORT': env('DB_PORT'),
-    # },
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': env('POSTGRES_DB'),
+        'USER': env('POSTGRES_USER'),
+        'PASSWORD': env('POSTGRES_PASSWORD'),
+        'HOST': env('POSTGRES_HOST'),
+        'PORT': env('DB_PORT'),
+    },
 
-    'default': env.db('SQLITE_URL')
+    # 'extra': env.db('SQLITE_URL')
 }
 
 # Password validation
@@ -135,6 +135,8 @@ STATIC_URL = 'static/'
 MEDIA_ROOT =  os.path.join(BASE_DIR, 'media')
 MEDIA_URL = '/media/'
 
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
 # Set the Custom User Model
 AUTH_USER_MODEL = "api.CustomUser"
 
@@ -168,10 +170,21 @@ REST_FRAMEWORK = {
 
 
 # ACTS AS CACHE AND BROKER FOR CELERY TASKS
+# CACHES = {
+#     "default": {
+#         "BACKEND": "django_redis.cache.RedisCache",
+#         "LOCATION": env('CACHE_URL'),
+#         "OPTIONS": {
+#             "CLIENT_CLASS": "django_redis.client.DefaultClient",
+#         }
+#     }
+# }
+
+
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": env('CACHE_URL'),
+        "LOCATION": "redis://default:pYsxRX1QsaJCoEFCEAP5HUx78EKBXD2a@redis-15976.c81.us-east-1-2.ec2.redns.redis-cloud.com:15976/0",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
@@ -194,35 +207,35 @@ DEFAULT_FROM_EMAIL= env('DEFAULT_FROM_EMAIL')
 
 
 # LOGGER SETTINGS
-# LOGGING = {
-#     'version': 1,
-#     'disable_existing_loggers': False,
-#     'formatters': {
-#         'verbose': {
-#             'format': '{levelname} {asctime} {name} {message}',
-#             'style': '{',
-#         },
-#         'simple': {
-#             'format': '{levelname} {message}',
-#             'style': '{',
-#         },
-#     },
-#     'handlers': {
-#         'file': {
-#             'level': 'DEBUG',
-#             'class': 'logging.FileHandler',
-#             'filename': 'debug.log',
-#             'formatter': 'verbose',
-#         }
-#     },
-#     'loggers': {
-#         'django': {
-#             'handlers': ['file'],
-#             'level': 'DEBUG',
-#             'propagate': True,
-#         },
-#     },
-# }
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {name} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': 'debug.log',
+            'formatter': 'verbose',
+        }
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['file'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+    },
+}
 
 
 from datetime import timedelta
