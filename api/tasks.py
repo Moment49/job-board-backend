@@ -25,5 +25,24 @@ def send_verification_email(data):
         logger.error("❌ SMTP authentication failed. Check SendGrid API key.")
     except smtplib.SMTPConnectError:
         logger.error("❌ Could not connect to the SMTP server. Check your internet connection or email service configuration.")
+
+
+@shared_task
+def send_job_submition_mail(data):
+    try:
+        msg = EmailMessage(
+            subject=data["email_subject"],
+            body=data['email_body'],
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[data['to_email']]
+        )
+        msg.send(fail_silently=False)
+        logger.info(f"✅ Email queued for {data['to_email']}")
+        return {"status": "sent"}
+    except smtplib.SMTPAuthenticationError:
+        logger.error("❌ SMTP authentication failed. Check SendGrid API key.")
+    except smtplib.SMTPConnectError:
+        logger.error("❌ Could not connect to the SMTP server. Check your internet connection or email service configuration.")
+
        
              

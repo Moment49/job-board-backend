@@ -3,8 +3,26 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from .models import Profile, AccountSettings, JobCategory, JobPost, JobApplication, JobApplicationReview
 from django.db.models import Q
+from django.utils.timezone import now
+import uuid
 
 CustomUser = get_user_model()
+
+
+class UserSerializer(serializers.ModelSerializer):
+    # This is to serializeer the User
+    full_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CustomUser
+        fields = ['user_id', 'email', 'first_name', 'last_name', "full_name"]
+        read_only_fields = ["user_id", "full_name", "password"]
+    
+    def get_full_name(self, obj):
+        # Get the full name of the user from the User obj method
+        return obj.get_full_name()
+    
+
 
 class RegisterUserSerializer(serializers.ModelSerializer):
     # This is to serializeer the User creation
@@ -18,7 +36,7 @@ class RegisterUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ['user_id', 'email', 'first_name', 'last_name', 'password', 'confirm_password', "full_name"]
-        read_only_fields = ["user_id", "full_name"]
+        read_only_fields = ["user_id", "full_name", 'role']
     
     def get_full_name(self, obj):
         # Get the full name of the user from the User obj method
@@ -115,23 +133,28 @@ class AdminUserSerializer(serializers.ModelSerializer):
     def validate(self, data):
         email = data['email']
         password = data.get('password', '')
+        role = data.get('role')
         if password:
             if len(password) < 7:
                 raise serializers.ValidationError("Password must be greater than 7 character")
         if not email:
             raise serializers.ValidationError("Email must not be empty")
-        
+
         return data
     
     def create(self, validated_data):
         email = validated_data.pop("email")
         password = validated_data.pop("password")
+        role = validated_data.pop("role")
         # Check if the user exists before creating
         try:
             admin_user = CustomUser.objects.get(email=email)
         except CustomUser.DoesNotExist:
             # Create the user
-            admin_user = CustomUser.objects.create_superuser(email=email, password=password, **validated_data)
+
+            # Set the role to match the human readbale form
+            role = role.upper()
+            admin_user = CustomUser.objects.create_superuser(email=email, password=password, role=role, **validated_data)
 
             # Add to the admin Role Group
             admin_group = Group.objects.get(name='Admin')
@@ -159,10 +182,11 @@ class AdminUserSerializer(serializers.ModelSerializer):
         return instance
 
 
-class AccounntSettingDeactivationSerializer(serializers.ModelSerializer):
+class AccounntSettingDisableSerializer(serializers.ModelSerializer):
+    refresh_token = serializers.CharField()
     class Meta:
         model = AccountSettings
-        fields = ['settings_id', "is_disabled"]
+        fields = ['settings_id', "is_disabled", "refresh_token"]
         read_only_fields = ['settings_id']
 
 class AccountSettingsSerializer(serializers.ModelSerializer):
@@ -237,4 +261,202 @@ class JobCategorySerializer(serializers.ModelSerializer):
 
         instance.save()
         return instance
+
+class UUIDWithoutDashField(serializers.UUIDField):
+    def to_internal_value(self, data):
+        try:
+            # Add dashes if missing
+            if isinstance(data, str) and "-" not in data:
+                data = str(uuid.UUID(data))
+            return super().to_internal_value(data)
+        except ValueError:
+            self.fail("invalid", value=data)
+
+
+class JobPostSerializer(serializers.ModelSerializer):
+    job_category = serializers.PrimaryKeyRelatedField(many=True, queryset=JobCategory.objects.all())
+    user = serializers.PrimaryKeyRelatedField(read_only=True)
+    class Meta:
+        model = JobPost
+        fields = ['job_id', 'job_title', 'job_description', 'company_name', 'salary', 'user', 'job_category']
+        read_only_fields = ['job_id']
+
     
+    def validate(self, data):
+        job_title = data.get('job_title')
+        job_desc = data.get('job_description')
+        job_company = data.get('company_name')
+        job_salary = data.get('salary')
+        if not job_title:
+            raise serializers.ValidationError("Job title must not be empty")
+        if not job_company:
+            raise serializers.ValidationError("Company must not be empty")
+        if not job_desc:
+            raise serializers.ValidationError("Job description must not be empty")
+        if not job_salary:
+            raise serializers.ValidationError("Job salary must not be empty")
+        
+        return data
+
+    
+    def create(self, validated_data):
+        job_catergory_ids = validated_data.pop("job_category")
+        # Create the job post
+        job_post = JobPost.objects.create(**validated_data)
+        job_post.save()
+
+        job_post.job_category.set(job_catergory_ids)
+
+        return job_post
+
+
+    
+    def update(self, instance, validated_data):
+        job_category_ids = validated_data.pop("job_category")
+
+        # Update fields one by one
+        instance.job_title = validated_data.pop("job_title", instance.job_title)
+        instance.company_name = validated_data.pop("company_name", instance.company_name)
+        instance.job_description = validated_data.pop("job_description", instance.job_description)
+        instance.salary = validated_data.pop("salary", instance.salary)
+
+       
+        instance.save()
+
+        instance.job_category.set(job_category_ids)
+        return instance 
+
+
+class JobApplicationSerializer(serializers.ModelSerializer):
+    job_post =  serializers.PrimaryKeyRelatedField(queryset=JobPost.objects.all())
+    user =  serializers.PrimaryKeyRelatedField(read_only=True)
+    class Meta:
+        model = JobApplication
+        fields = ['job_app_id', 'cover_letter', 'resume_cv',
+                  'institution_name', 'field_of_study', 'grade', 'degree_Qualification',
+                  'degree_start_date', 'deree_end_date', 'degree_Certificate', 'availability', 
+                  'job_application_submission', 'application_review_status', 'user', 'job_post' 
+                  ]
+        read_only_fields = ['job_app_id', 'job_application_submission', 'application_review_status']
+
+    def validate(self, data):
+        """Extra validation before create() is called"""
+        # Dates check
+        user = self.context['request'].user
+        start_date = data.get('degree_start_date')
+        end_date = data.get('degree_end_date')
+        job_post = data.get('job_post')
+      
+
+        
+        if start_date and end_date and end_date < start_date:
+            raise serializers.ValidationError(
+                {"degree_end_date": "End date cannot be earlier than start date."}
+            )
+
+        # Availability date check
+        availability = data.get('availability')
+        if availability and availability < now().date():
+            raise serializers.ValidationError(
+                {"availability": "Availability date must be today or later."}
+            )
+            
+        # Check that user has not applied for job before
+        # print(job_post)
+        existing_application = JobApplication.objects.filter(
+            user=user,
+            job_post=job_post,
+            job_application_submission="Submitted"
+        )
+        if existing_application.exists():
+            raise serializers.ValidationError({"error": "You cannot apply for this job again"})
+        
+        return data
+        
+    def create(self, validated_data):
+        # Get the user making the request
+        user = self.context['request'].user
+
+        # Get the job post the user is applying to
+        job_post = validated_data.pop('job_post')
+
+        # List of all fields required to consider the application complete
+        all_fields =['cover_letter', 'resume_cv',
+                  'institution_name', 'field_of_study', 'grade', 'degree_Qualification',
+                  'degree_start_date', 'deree_end_date', 'degree_Certificate', 'availability', 
+                  ]
+        
+        # Prevent a user from applying to a job they created themselves
+        if job_post.user == user:
+            raise serializers.ValidationError(
+                {"job_post": "You cannot apply to a job you created."})
+    
+
+        existing_application = JobApplication.objects.filter(
+            user=user,
+            job_post=job_post,
+            job_application_submission="Incomplete"
+        )
+        if existing_application.exists():
+            raise serializers.ValidationError(
+                {"error": "You cannot create a new application please update your former on for this job again"})
+        # Check if all required fields are filled
+        filled_data = all(validated_data.get(field) for field in all_fields)
+        
+        # Determine submission status based on whether all fields are filled
+        validated_data['job_application_submission'] = "Submitted" if filled_data else "Incomplete"
+        
+        # Create the JobApplication object in the database   
+        application = JobApplication.objects.create( job_post=job_post, **validated_data)   
+
+        application.save()
+        
+        return application
+    
+    def update(self, instance, validated_data):
+        # Check the current submission status
+        submition_status = instance.job_application_submission 
+
+        # Only allow updating if the application is still incomplete
+        if submition_status != "Incomplete":
+            raise serializers.ValidationError("You have applied for this job")
+        
+        # Update instance fields dynamically from validated_data
+        for key, value in validated_data.items():
+            setattr(instance, key, value)
+        # List of all fields required for a complete application
+        all_fields = ['cover_letter', 'resume_cv',
+                  'institution_name', 'field_of_study', 'grade', 'degree_Qualification',
+                  'degree_start_date', 'deree_end_date', 'degree_Certificate', 'availability', 
+                  ]
+      
+        filled_data = all(getattr(instance, field) for field in all_fields)
+        instance.job_application_submission = "Submitted" if filled_data else "Incomplete" 
+        
+        instance.save()
+        return instance
+
+class JobApplicationReviewSerializer(serializers.ModelSerializer):
+    job_app =  serializers.PrimaryKeyRelatedField(queryset=JobPost.objects.all())
+    reviewed_by =  serializers.PrimaryKeyRelatedField(read_only=True)
+    class Meta:
+        model = JobApplicationReview
+        fields = ["job_app_review_id", "reason", "reviewed_at", "reviewed_by", "job_applicatiion_review", "job_app"]
+        read_only_fields = ['job_app_review_id']
+
+    def update(self, instance, validated_data):
+        # check if the application is submitted if it is then review it
+        reviewed_by = validated_data.get('reviewed_by')
+        instance.reason = validated_data.get('reason', instance.reason)
+        instance.reviewed_at = validated_data.get('reviewed_at', instance.reviewed_at)
+        instance.reviewed_by = validated_data.get('reviewed_by', instance.reviewed_by)
+
+        instance.job_applicatiion_review = validated_data.get('job_applicatiion_review', instance.job_applicatiion_review)
+    
+        if instance.job_applicatiion_review == "Reviewed":
+            # Update the application_review_status of the job application
+            instance.job_app.application_review_status = True
+        instance.save()
+
+        return instance
+     

@@ -9,8 +9,8 @@ from rest_framework import generics
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from .serializers import (RegisterUserSerializer, AccountVerificationSerializer, LoginSerialzer, 
-                        LogoutSerializer, AdminUserSerializer, ProfileSerializer, AccounntSettingDeactivationSerializer,
-                        JobCategorySerializer)
+                        LogoutSerializer, AdminUserSerializer, ProfileSerializer, AccounntSettingDisableSerializer,
+                        JobCategorySerializer,JobPostSerializer, JobApplicationSerializer,JobApplicationReviewSerializer)
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.sites.shortcuts import get_current_site
 from django.urls import reverse
@@ -32,6 +32,10 @@ from django.db.models import Q
 from .permissions import IsAdminManagingUsers
 from .models import Profile, AccountSettings, JobApplication, JobApplicationReview, JobCategory, JobPost
 import logging
+from rest_framework import generics, filters
+from django_ratelimit.decorators import ratelimit
+from django_filters.rest_framework import DjangoFilterBackend
+
 
 # Set the logger entry point
 logger = logging.getLogger(__name__)
@@ -59,7 +63,8 @@ class UserRegisterView(generics.CreateAPIView):
             token = refresh.access_token  
 
             # Add custom claims
-            token['roles'] = user.role
+            # token['roles'] = user.role
+            token['user_id'] = str(user.id)
 
             current_site = get_current_site(request).domain
             relativeLink=reverse('account-verification')
@@ -100,7 +105,8 @@ class AccountVerificationView(APIView):
             return Response({"message": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
 
 
-
+@ratelimit(key='user', rate='5/m', block=True)
+@ratelimit(key='ip', rate='10/m', block=True)
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_view(request):
@@ -254,57 +260,63 @@ class ProfileListUpdateView(APIView):
 
 
 
-class AccountDeactivateView(APIView):
+class AccountDisableView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request,  *args, **kwargs):
         """
-        Deactivate the account settings.
+        Disable the account from account settings.
         - Users can deactivate only their own account.
         - Admins can deactivate any account.
         """
-       # Default: logged-in user's profile
-        userprofile = request.user.profile
-        account_setting = userprofile.account_settings
-
         user_id = request.data.get('user_id')
         # check if user exists
-        user = get_object_or_404(CustomUser, id=user_id)
+        
         if user_id:
-            userprofile = user.profile
-            account_setting = userprofile.account_settings
-
             if request.user.role != "ADMIN":
                 return Response(
                     {"detail": "You do not have permission to disable other users."},
                     status=status.HTTP_403_FORBIDDEN
                 )
-            
-        if request.user.role == 'ADMIN' and user.role == "ADMIN":
-            return Response(
-                {"detail": "You cannot disable another admin account."},
-                status=status.HTTP_403_FORBIDDEN)
+            user = get_object_or_404(CustomUser, id=user_id)
+            if user.role == "ADMIN":
+                return Response(
+                    {"detail": "You cannot disable another admin account."},
+                    status=status.HTTP_403_FORBIDDEN)
         
-       # For regular users, ensure they are only deactivating themselves
-        if request.user != userprofile.user:
-            return Response(
-                {"detail": "You cannot disable another user's account."},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        serializer = AccounntSettingDeactivationSerializer(
+       
+        # Default: logged-in user's profile
+        userprofile = request.user.profile
+        account_setting = userprofile.account_settings
+        # Call the serializer to update the data
+        serializer = AccounntSettingDisableSerializer(
             account_setting,
-            data={"is_deactivated":True},
+            data={"is_disabled":True},
             partial=True
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response({"detail": "Account has been deactivated successfully."}, status=200)
+
+        # Blacklist token if provided
+        token = serializer.validated_data.get('refresh_token')
+        if token:
+            try:
+                token = RefreshToken(token)
+                token.blacklist()
+            except Exception:
+                pass
+       
+        # Once the invalidate there token and them account
+        return Response({"detail": "Account has been disabled successfully."}, status=200)
 
     
 class JobCategoryViewSet(ModelViewSet):
     queryset = JobCategory.objects.all()
     serializer_class = JobCategorySerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_fields = ['job_category_name', 'job_category_type']
+    search_fields = ['job_category_type', 'job_category_name']
 
     def perform_create(self, serializer):
         if self.request.user.role != "ADMIN":
@@ -342,17 +354,153 @@ class JobCategoryViewSet(ModelViewSet):
 class JobPostViewSet(ModelViewSet):
     # View for Job Posts only admins can create update or delete all users can view
     queryset = JobPost.objects.all()
+    serializer_class = JobPostSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_fields = ['job_category', 'job_category__job_category_type', 'job_category__job_category_name']
+    search_fields = ['company_name', 'salary']
+
+    def perform_create(self, serializer):
+        # Check if user is admin before creating
+        if self.request.user.role != "ADMIN":
+            raise PermissionDenied("Sorry only admins can create job posts")
+        return serializer.save(user=self.request.user)
     
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        # Check the user permission
+        if request.user.role != "ADMIN":
+            return Response({"error": "Sorry you cant update this job post"}, status=status.HTTP_403_FORBIDDEN)
+        
+        # check if the job post belongs to the person that created it
+        if instance.user != request.user:
+            return Response({"error": "Sorry you cant update a job post that is not yours job"}, status=status.HTTP_403_FORBIDDEN)
+
+        self.perform_update(serializer)
+        return Response({"message": "Job post Updated successfully","data":serializer.data}, status=status.HTTP_200_OK)
+    
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+
+        # Only admins can delete job posts
+        if request.user.role != "ADMIN":
+            return Response(
+                {"error": "Sorry you cannot delete this job post"}, 
+                status=status.HTTP_403_FORBIDDEN)
+        
+        # Admin cannot delete another admin's post
+        if instance.user.role == "ADMIN" and instance.user != request.user:
+            return Response(
+              {"error": "Admins cannot delete other admins' job posts."}, 
+                status=status.HTTP_403_FORBIDDEN)
+
+        self.perform_destroy(instance)
+        return Response(
+            {"message":"Job post deleted successfully"},
+            status=status.HTTP_204_NO_CONTENT)
+    
+    def list(self, request, *args, **kwargs):
+        if request.user.role == "ADMIN":
+            job_posts = JobPost.objects.filter(
+                user=request.user).prefetch_related('job_category')
+        else:
+            job_posts = JobPost.objects.prefetch_related('job_category')
+
+        # For Filtering Serach 
+        queryset = self.filter_queryset(job_posts) 
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({"data":serializer.data}, status=status.HTTP_200_OK)
 
 
 class JobApplicationViewSet(ModelViewSet):
     # Views for All users to apply to Job Admins cannot apply to job
     queryset = JobApplication.objects.all()
+    serializer_class = JobApplicationSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_fields = ['application_review_status', 'job_post__job_title']
+    search_fields = ['job_application_submission']
+
+    
+    def get_seializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request  
+        return context
+
+    def perform_create(self, serializer):
+       serializer.save(user=self.request.user)
+    
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.user != request.user:
+            raise PermissionDenied("You cannot delete someone else's application.")
+        if instance.job_application_submission == "Submitted":
+            raise PermissionDenied("You cannot delete a submitted application.")
+
+        print(instance)
+        self.perform_destroy(instance)
+        return Response({"message":"application deleted succesfully"},status=status.HTTP_204_NO_CONTENT)
+    
+    
+    def list(self, request, *args, **kwargs):
+        # Check if user is admin and is the job poster
+        if request.user.role == "ADMIN":
+           queryset= JobApplication.objects.filter(job_post__user=request.user, 
+                                          job_application_submission_status="Submitted").select_related(
+                                              'job_post', 'job_post__user')
+        else:
+            queryset = JobApplication.objects.filter(user=request.user)
+
+        queryset = self.filter_queryset(queryset)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
 
 class JobApplicationReviewView(APIView):
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_fields = ['job_applicatiion_review', 'reviewed_at', "job_app__field_of_study"]
+
     # Reviews for Application. Admins to have access to this view only
     def get(self, request):
-        ...
+        if request.user.role != "ADMIN":
+            return Response({"message":"Sorry you cant view this resource. Must be an admin"})
+        
+         # Get all JobApplicationReviews for applications of jobs posted by this admin
+        reviews = JobApplicationReview.objects.filter(
+            job_app__job_post__user=request.user
+        ).select_related('job_app', 'job_app__job_post', 'reviewed_by')
+
+        # Serialize the reviews
+        serializer = JobApplicationReviewSerializer(reviews, many=True)
+        return Response(serializer.data)
+
     def put(self, request):
-        ...
+       # Only admins can update reviews
+        if request.user.role != "ADMIN":
+            return Response(
+                {"message": "Sorry, you can't update this resource. Must be an admin."},
+                status=403
+            )
+        
+        review_id = request.data.get('job_app_review_id')
+        if not review_id:
+            return Response({"error": "review_id is required"}, status=400)
+
+        try:
+            review = JobApplicationReview.objects.get(job_app_review_id=review_id)
+        except JobApplicationReview.DoesNotExist:
+            return Response({"error": "Review not found"}, status=404)
+
+        # Ensure the admin is the owner of the related job post
+        if review.job_app.job_post.user != request.user:
+            return Response({"error": "You can only update reviews for your own job posts"}, status=403)
+
+        serializer = JobApplicationReviewSerializer(review, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return Response(serializer.data)

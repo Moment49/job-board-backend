@@ -1,7 +1,8 @@
 from django.urls import path
 from .views import (UserRegisterView, 
                     AccountVerificationView, login_view, logout_view, AdminUserViewSet,
-                    ProfileListUpdateView,AccountDeactivateView, JobCategoryViewSet)
+                    ProfileListUpdateView,AccountDisableView, JobCategoryViewSet, 
+                    JobPostViewSet, JobApplicationViewSet, JobApplicationReviewView)
 from rest_framework_simplejwt.views import (
     TokenObtainSlidingView,
     TokenRefreshSlidingView,
@@ -12,6 +13,9 @@ router = DefaultRouter()
 
 router.register(r'admin/users', AdminUserViewSet, basename="admin-users"),
 router.register(r'job/category', JobCategoryViewSet, basename="job-category")
+router.register(r'job-posts', JobPostViewSet, basename="job-posts")
+router.register(r'job-applications', JobApplicationViewSet, basename="job-applications")
+
 
 
 urlpatterns = [
@@ -22,6 +26,8 @@ urlpatterns = [
     path("auth/login", login_view, name="login"),
     path("auth/logout", logout_view, name="logout"),
     path("profile/", ProfileListUpdateView.as_view(), name="profile"),
-    path('profile/deactivate/', AccountDeactivateView.as_view(), name='profile-deactivate'),
+    path('profile/deactivate/', AccountDisableView.as_view(), name='profile-deactivate'),
+    path('application/reviews/', JobApplicationReviewView.as_view(), name='application-review'),
+
 ]
 urlpatterns += router.urls

@@ -24,8 +24,7 @@ class CustomUserManager(BaseUserManager):
         user = self.model(email=self.normalize_email(email), 
                           first_name=first_name,
                           last_name=last_name,
-                          phone_number=phone_number,
-                          role=role)
+                          phone_number=phone_number)
         # Hash the password using the default password hasher
         user.set_password(password)
         user.is_active = False
@@ -129,7 +128,7 @@ class JobCategory(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.job_category_name} - {self.job_category_type}"
+        return f"{self.job_category_id}"
 
 class JobPost(models.Model):
     job_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -138,7 +137,7 @@ class JobPost(models.Model):
     company_name = models.CharField(max_length=100, blank=False, null=False)
     salary = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='job_posts')
-    job_category = models.ManyToManyField(JobCategory)
+    job_category = models.ManyToManyField(JobCategory, related_name="job_posts")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -157,10 +156,10 @@ class JobApplication(models.Model):
     field_of_study = models.CharField(max_length=100, blank=True, null=True)
     grade = models.DecimalField(max_digits=3, decimal_places=2, blank=True, null=True)
     degree_Qualification = models.CharField(max_length=200, blank=True, null=True)
-    degree_start_date = models.DateField()
-    deree_end_date  = models.DateField()
+    degree_start_date = models.DateField(blank=True, null=True)
+    deree_end_date  = models.DateField(blank=True, null=True)
     degree_Certificate = models.ImageField(upload_to="certificates/", blank=True, null=True)
-    availability = models.DateField()
+    availability = models.DateField(blank=True, null=True)
     job_application_submission = models.CharField(max_length=15, choices=JOB_APPLICATION_SUBMISSION_STATUS, default="Incomplete", blank=True, null=True)
     application_review_status = models.BooleanField(default=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='job_applications')
@@ -179,7 +178,7 @@ class JobApplicationReview(models.Model):
     
     job_app_review_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     reason = models.TextField(blank=False, null=False)
-    reviewed_at = models.DateTimeField(auto_now_add=False)
+    reviewed_at = models.DateTimeField(auto_now_add=False, blank=True, null=True)
     reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name="job_application_review", null=True)
     job_applicatiion_review = models.CharField(max_length=20, choices=JOB_APPLICATION_REVIEW_STATUS, default="Not Reviewed", blank=False, null=False)
     job_app = models.ForeignKey(JobApplication, on_delete=models.CASCADE, related_name="job_application_reviews")
@@ -189,7 +188,15 @@ class JobApplicationReview(models.Model):
         return f"Review {self.job_app_review_id} for job application {self.job_app.job_app_id}"
     
 
+class RequestLog(models.Model):
+    ip_address = models.CharField(max_length=45)
+    path = models.CharField(max_length=200)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    country = models.CharField(max_length=100, blank=True, null=True)
+    city = models.CharField(max_length=100, blank=True, null=True)
 
+    def __str__(self):
+        return f"{self.ip_address} - {self.path} at {self.timestamp} from {self.city}, {self.country}"
 
 
 
