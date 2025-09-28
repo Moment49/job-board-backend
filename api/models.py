@@ -24,7 +24,8 @@ class CustomUserManager(BaseUserManager):
         user = self.model(email=self.normalize_email(email), 
                           first_name=first_name,
                           last_name=last_name,
-                          phone_number=phone_number)
+                          phone_number=phone_number,
+                          )
         # Hash the password using the default password hasher
         user.set_password(password)
         user.is_active = False
