@@ -170,15 +170,15 @@ REST_FRAMEWORK = {
 
 
 # ACTS AS CACHE AND BROKER FOR CELERY TASKS
-CACHES = {
-    "default": {
-        "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": env('CACHE_URL'),
-        "OPTIONS": {
-            "CLIENT_CLASS": "django_redis.client.DefaultClient",
-        }
-    }
-}
+# CACHES = {
+#     "default": {
+#         "BACKEND": "django_redis.cache.RedisCache",
+#         "LOCATION": env('CACHE_URL'),
+#         "OPTIONS": {
+#             "CLIENT_CLASS": "django_redis.client.DefaultClient",
+#         }
+#     }
+# }
 
 
 CACHES = {
@@ -196,7 +196,6 @@ CELERY_CACHE_BACKEND = 'default'
 
 # CELERY settings - This is the message broker that will be used to send and receive messages from the celery worker
 CELERY_BROKER_URL = env("CELERY_BROKER_URL")
-
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND")
 
 # EMAIL SERVICE CONFIGURATION

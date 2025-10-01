@@ -9,32 +9,36 @@ from rest_framework import generics
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from .serializers import (RegisterUserSerializer, AccountVerificationSerializer, LoginSerialzer, 
-                        LogoutSerializer, AdminUserSerializer, ProfileSerializer, AccounntSettingDisableSerializer,
-                        JobCategorySerializer,JobPostSerializer, JobApplicationSerializer,JobApplicationReviewSerializer)
+                        LogoutSerializer, AdminUserManagementSerializer, ProfileSerializer,
+                        JobCategorySerializer,JobPostSerializer, JobApplicationSerializer,
+                        AdminSerializer, ChangePasswordSerializer,JobApplicationReviewSerializer,AccountSettingDisableSerializer)
+
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.sites.shortcuts import get_current_site
 from django.urls import reverse
 from .tasks import send_verification_email
 from django.db import transaction
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, action
 import jwt
 from rest_framework import status
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
 from rest_framework.decorators import permission_classes, authentication_classes
 from django.contrib.auth import authenticate
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth.models import Group
 from rest_framework.exceptions import PermissionDenied
 from django.db.models import Q
-from .permissions import IsAdminManagingUsers
-from .models import Profile, AccountSettings, JobApplication, JobApplicationReview, JobCategory, JobPost
+from .permissions import IsAdminManagingUsers, AdminReadOnlyForOthers
+from .models import Profile, JobApplication, JobApplicationReview, JobCategory, JobPost
 import logging
 from rest_framework import generics, filters
 from django_ratelimit.decorators import ratelimit
 from django_filters.rest_framework import DjangoFilterBackend
+import uuid
 
 
 # Set the logger entry point
@@ -63,8 +67,8 @@ class UserRegisterView(generics.CreateAPIView):
             token = refresh.access_token  
 
             # Add custom claims
-            # token['roles'] = user.role
             token['user_id'] = str(user.id)
+            token['roles'] = user.role
 
             current_site = get_current_site(request).domain
             relativeLink=reverse('account-verification')
@@ -81,7 +85,8 @@ class UserRegisterView(generics.CreateAPIView):
                     "error": str(e)}, status=500)
                 # Later implement removing the user after sometime if email is not valid will need to implement a web hook for this
       
-        return Response({"message:user created successfully"}, status=status.HTTP_201_CREATED)
+        return Response({"message":"user created successfully, please check your email for account activation", 
+                        "data":serializer.data}, status=status.HTTP_201_CREATED)
 
 class AccountVerificationView(APIView):
     serializer_class = AccountVerificationSerializer
@@ -98,12 +103,12 @@ class AccountVerificationView(APIView):
             if not user.is_active:
                 user.is_active = True
                 user.save()
-                return Response({"message": "Email successfully activated"}, status=status.HTTP_200_OK)
         except jwt.exceptions.ExpiredSignatureError:
             return Response({"message": "Activation link Expired"}, status=status.HTTP_400_BAD_REQUEST)
         except jwt.exceptions.DecodeError:
             return Response({"message": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
-
+        
+        return Response({"message": "Email successfully activated"}, status=status.HTTP_200_OK)
 
 @ratelimit(key='user', rate='5/m', block=True)
 @ratelimit(key='ip', rate='10/m', block=True)
@@ -117,7 +122,7 @@ def login_view(request):
             email = serializer.validated_data['email']
             password = serializer.validated_data['password']
             user = authenticate(username=email, password=password)
-            print(user)
+        
             # Check if user is not None and active
             if user is not None:
                 if not user.is_active:
@@ -175,60 +180,34 @@ def logout_view(request):
             return  Response({"message":"Bad  request - Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
 
 
-
-class AdminUserViewSet(ModelViewSet):
-    """
-    Endpoint: admin/users/
-
-    **Access:** Admin users only.
-
-    Returns all users in the system (including admins) for management purposes.
-    Supports listing, retrieving, creating, updating, and deleting users.
-    """
-    # Endpoint to create users by admins 
-    permission_classes = [IsAuthenticated, IsAdminManagingUsers]
-    authentication_classes = [JWTAuthentication]
-    serializer_class = AdminUserSerializer
-
-    def perform_create(self, serializer):
-        # Check if the user has the right role before creating
-        user = self.request.user
-        if user.role != "ADMIN":
-            return PermissionDenied("Sorry you must be an admin to be perform this action")
-        # Admins dont need  to activate accounts for admins
-        return serializer.save()
-
-    def get_queryset(self):
-        # Check the user role and allow admin to see all users
-        return CustomUser.objects.all()
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@authentication_classes([JWTAuthentication])
+def change_password(request, user_pk):
+    if request.method == "POST":
+        # Check that the user making the change is the same user making request
+        user = CustomUser.objects.get(id=user_pk)
     
-    def perform_update(self, serializer):
-        serializer.save()
-       
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
+        print(user_pk)
+        # Convert to uuid format
+        user_pk = uuid.UUID(user_pk)
+        print(user_pk)
+        if user.pk != user_pk:
+            return Response({"error":"Cannot change password of another user"}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        serializer = ChangePasswordSerializer(data=request.data, context={"request":request})
+        if serializer.is_valid(raise_exception=True):
+            new_password =  serializer.validated_data.get('new_password')
+            confirm_new_password = serializer.validated_data.get('confirm_new_password')
+            # update the user password that has been validated from the serializer
+            if new_password != confirm_new_password:
+                raise Response({"error":"Passwords do not match"})
+            # change the password for user
+            user.set_password(new_password)
+            user.save()
+            return Response({"detail":f"Password changed for user `{user.get_full_name()}` sucessful"}, status=status.HTTP_200_OK)
+        
 
-        return Response({"detail": f"{instance.role} updated successfully", "data":serializer.data}, status=status.HTTP_200_OK)
-
-    def list(self, request, *args, **kwargs):
-        if self.request.user.role == 'ADMIN':
-            queryset = CustomUser.objects.filter(
-                Q(role="USER") | Q(email=self.request.user.email)
-            )
-        else:
-            return CustomUser.objects.none()
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-    
-    def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
-        self.perform_destroy(instance)
-        return Response({"detail":f"User {instance.get_full_name()} deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
-    
 
 class ProfileListUpdateView(APIView):
     permission_classes = [IsAuthenticated]
@@ -241,6 +220,7 @@ class ProfileListUpdateView(APIView):
     def put(self, request):
         profile = request.user.profile
         data = request.data.copy()
+
         # Ensure is_deactivated is never updated
         data.get('account_settings', {}).pop('is_disabled', None)
 
@@ -260,56 +240,213 @@ class ProfileListUpdateView(APIView):
 
 
 
-class AccountDisableView(APIView):
+class UserAccountDisableView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request,  *args, **kwargs):
         """
-        Disable the account from account settings.
-        - Users can deactivate only their own account.
-        - Admins can deactivate any account.
+        Disable the account from profile settings.
+        Users can disable only their own account.
         """
-        user_id = request.data.get('user_id')
         # check if user exists
+        user_id = kwargs.get('user_pk')
+        user_id = uuid.UUID(user_id)
+        user = get_object_or_404(CustomUser, id=user_id)
+
+        if not user:
+            return Response({"detail": "Missing user id."}, status=status.HTTP_400_BAD_REQUEST)
         
-        if user_id:
-            if request.user.role != "ADMIN":
-                return Response(
+        # Ensure only the logged-in user can disable themselves
+        if request.user.id != user_id:
+            return Response(
                     {"detail": "You do not have permission to disable other users."},
                     status=status.HTTP_403_FORBIDDEN
                 )
-            user = get_object_or_404(CustomUser, id=user_id)
-            if user.role == "ADMIN":
-                return Response(
-                    {"detail": "You cannot disable another admin account."},
-                    status=status.HTTP_403_FORBIDDEN)
         
-       
-        # Default: logged-in user's profile
+        # Update account settings
         userprofile = request.user.profile
         account_setting = userprofile.account_settings
-        # Call the serializer to update the data
-        serializer = AccounntSettingDisableSerializer(
+        serializer = AccountSettingDisableSerializer(
             account_setting,
             data={"is_disabled":True},
             partial=True
         )
         serializer.is_valid(raise_exception=True)
-        serializer.save()
-
-        # Blacklist token if provided
-        token = serializer.validated_data.get('refresh_token')
-        if token:
+        
+        # Deactivate user
+        if user.is_active:
+            user.is_active = False
+            user.save()
+            # Blacklist refresh token if provided
+            token = serializer.validated_data.get('refresh_token')
             try:
                 token = RefreshToken(token)
                 token.blacklist()
             except Exception:
                 pass
-       
-        # Once the invalidate there token and them account
+
         return Response({"detail": "Account has been disabled successfully."}, status=200)
 
+
+# ADMIN USER MANAGEMENT
+class AdminUserViewSet(ModelViewSet):
+    """
+    Endpoint: admin/users/
+
+    **Access:** Admin users only.
+
+    Returns all users in the system  for management purposes.
+    Supports listing, retrieving, creating, updating, and deleting users.
+    """
+    # Endpoint to create users by admins 
+    permission_classes = [IsAuthenticated, IsAdminManagingUsers]
+    authentication_classes = [JWTAuthentication]
+    serializer_class = AdminUserManagementSerializer
+
+
+    @action(detail=True, methods=['post'])
+    def disable_user(self, request, pk=None):
+        # Check if the user making the request is an ADMIN
+        if request.user.role != "ADMIN":
+            return Response({"error":"Sorry you can access this resource"})
+      
+        # Check if the user is valid
+        user = get_object_or_404(CustomUser, id=pk)
+        user.is_active = True
+        user.save()
+        print(user.is_active)
+        if user.is_active:
+            # Disable user
+            user.profile.account_settings.is_disabled = True
+            user.profile.account_settings.save()
+            user.is_active = False
+            user.save()
+
+            # Blacklist refresh token if provided
+            user_tokens = OutstandingToken.objects.filter(user_id=user.id)
+            for token in user_tokens:
+                BlacklistedToken.objects.get_or_create(token=token)
+
+        return Response({"detail": "Account has been disabled successfully."}, status=200)
     
+    @action(detail=True, methods=['post'])
+    def enable_user(self, request, pk=None):
+        user = self.get_object()
+        if user.is_active:
+            return Response({"detail": "User is already active."}, status=400)
+        
+        # Re-enable user
+        user.is_active = True
+        user.profile.account_settings.is_disabled =  False
+
+        # Turn of the is_disable in account settings
+        user.profile.account_settings.save()
+        user.save()
+        return Response({"detail": "Account has been Enable successfully."}, status=200)
+    
+    
+
+    def get_queryset(self):
+        return CustomUser.objects.filter(role="USER")
+    
+    def perform_create(self, serializer):
+        # Check if the user has the right role before creating
+        user = self.request.user
+        if user.role != "ADMIN":
+            raise PermissionDenied("Sorry you must be an admin to be perform this action")
+      
+        return serializer.save()
+       
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        # check if it is a user update
+        if instance.role != "USER":
+            raise PermissionDenied("Sorry you cannot update data that is not user data")
+        
+        if instance.role == request.user.role:
+            raise PermissionDenied("Sorry you cannot update your data here")
+        
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        return Response({"detail": f"{instance.role} updated successfully", "data":serializer.data}, status=status.HTTP_200_OK)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({"detail": "successfully listed data", "data":serializer.data}, status=status.HTTP_200_OK)
+    
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if request.user.role != "ADMIN":
+            raise PermissionDenied({"error":"You cannot view this resource if not an admin"})
+        
+        if instance.role != "USER":
+            raise PermissionDenied({"error": "You cannot view admin users from this endpoint"})
+        
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+    
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if request.user.id == instance.id:
+            raise PermissionDenied("Sorry, you cannot delete your own account here.")
+        self.perform_destroy(instance)
+        return Response({"detail":f"User {instance.get_full_name()} deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
+    
+
+
+class AdminViewSet(ModelViewSet):
+    """Admin View to PERFORM CRUD operations on ADMIN by an Admin
+    """
+    queryset = CustomUser.objects.all()
+    serializer_class = AdminSerializer
+    permission_classes = [IsAuthenticated, AdminReadOnlyForOthers]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data = request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        return Response({"detail":"Admin created successfully", "data":serializer.data},
+                        status=status.HTTP_201_CREATED)
+    
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+
+        if instance.id  != request.user.id:
+            raise PermissionDenied({"error":"You cannot update this resource that is not yours"})
+        
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        return Response({"detail": f"{instance.role} updated successfully", "data":serializer.data}, status=status.HTTP_200_OK)
+    
+    def list(self, request, *args, **kwargs):
+        if request.user.role == "ADMIN":
+            queryset = CustomUser.objects.filter(role="ADMIN") 
+        else:
+            return CustomUser.objects.none()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({"detail": "successfully listed data", "data":serializer.data}, status=status.HTTP_200_OK)
+    
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if request.user.role != "ADMIN":
+            raise PermissionDenied({"error":"You cannot view this resource if not an admin"})
+        
+        if instance.role != "ADMIN":
+            raise PermissionDenied({"error": "You cannot view non-admin users from this endpoint"})
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+
+
+
+# JOB CATEGORY MANAGEMNT
 class JobCategoryViewSet(ModelViewSet):
     queryset = JobCategory.objects.all()
     serializer_class = JobCategorySerializer
@@ -351,6 +488,7 @@ class JobCategoryViewSet(ModelViewSet):
         return Response(serializer.data)
 
 
+# JOB POST MANAGEMENT
 class JobPostViewSet(ModelViewSet):
     # View for Job Posts only admins can create update or delete all users can view
     queryset = JobPost.objects.all()
@@ -415,6 +553,7 @@ class JobPostViewSet(ModelViewSet):
         return Response({"data":serializer.data}, status=status.HTTP_200_OK)
 
 
+# JOB APPLICATION MANAGEMENT
 class JobApplicationViewSet(ModelViewSet):
     # Views for All users to apply to Job Admins cannot apply to job
     queryset = JobApplication.objects.all()
@@ -459,6 +598,8 @@ class JobApplicationViewSet(ModelViewSet):
         return Response(serializer.data)
 
 
+
+# JOB APLLICATION REVIEW MANAGEMENT
 class JobApplicationReviewView(APIView):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]

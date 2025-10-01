@@ -5,6 +5,7 @@ from .models import Profile, AccountSettings, JobCategory, JobPost, JobApplicati
 from django.db.models import Q
 from django.utils.timezone import now
 import uuid
+from django.contrib.auth.hashers import check_password
 
 CustomUser = get_user_model()
 
@@ -15,8 +16,8 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ['user_id', 'email', 'first_name', 'last_name', "full_name"]
-        read_only_fields = ["user_id", "full_name", "password"]
+        fields = ['id', 'email', 'first_name', 'last_name', "full_name"]
+        read_only_fields = ["id", "full_name", "password"]
     
     def get_full_name(self, obj):
         # Get the full name of the user from the User obj method
@@ -26,7 +27,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 class RegisterUserSerializer(serializers.ModelSerializer):
     # This is to serializeer the User creation
-    user_id = serializers.UUIDField(read_only=True)
+    id = serializers.UUIDField(read_only=True)
     first_name = serializers.CharField(write_only=True)
     last_name = serializers.CharField(write_only=True)
     password = serializers.CharField(write_only=True)
@@ -35,42 +36,28 @@ class RegisterUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ['user_id', 'email', 'first_name', 'last_name', 'password', 'confirm_password', "full_name"]
-        read_only_fields = ["user_id", "full_name", 'role']
+        fields = ['id', 'email', 'first_name', 'last_name', 'password', 'confirm_password', "full_name"]
+        read_only_fields = ["id", "full_name", "role"]
     
     def get_full_name(self, obj):
         # Get the full name of the user from the User obj method
         return obj.get_full_name()
     
-    def validate_first_name(self, value):
-        if not value:
-            raise serializers.ValidationError("First name cannot be empty")
-        return value
-    
-    def validate_last_name(self, value):
-        if not value:
-            raise serializers.ValidationError("Last name cannot be empty")
-        return value
-    
     def validate_email(self, value):
         if CustomUser.objects.filter(email=value).exists():
-            raise serializers("Sorry user with email already exists")
+            raise serializers.ValidationError("Sorry user with email already exists")
         return value
-
-
     
     def validate(self, data):
         password = data.get("password")
         confirm_password = data.get("confirm_password")
-        if not password or not confirm_password:
-            raise serializers.ValidationError("Sorry password cannot be empty")
+
         if password != confirm_password:
-            raise serializers.ValidationError("Sorry passwords do not match")
-        if len(password) <= 7 or len(confirm_password) <= 7:
-            raise serializers.ValidationError("Password must be greater than 7 characters")
+            raise serializers.ValidationError({"error":"Sorry passwords do not match"})
+        if len(password) <= 7 and len(confirm_password) <= 7:
+            raise serializers.ValidationError({"Password must be greater than 7 characters"})
 
         return data
-
 
     def create(self, validated_data):
         # Create the user
@@ -82,11 +69,13 @@ class RegisterUserSerializer(serializers.ModelSerializer):
             user = CustomUser.objects.get(email=email)
         except CustomUser.DoesNotExist:
             user = CustomUser.objects.create_user(email=email, password=password, **validated_data)
+
             # Add user to Role Group (USER)
             user_group = Group.objects.get(name='User')
             user_group.user_set.add(user)
         
         return user
+
 
 class AccountVerificationSerializer(serializers.Serializer):
     token = serializers.CharField(max_length=555)
@@ -96,98 +85,40 @@ class LoginSerialzer(serializers.Serializer):
     email = serializers.EmailField(write_only=True)
     password = serializers.CharField(write_only=True)
 
-    def validate(self, data):
-        # Check if the data is not empty
-        email = data.get('email')
-        password = data.get('password')
-
-        if not email:
-            raise serializers.ValidationError("Please provide an email")
-        if not password:
-            raise serializers.ValidationError("Plase provide your password")
-        # Return data once validation is complete
-        return data
-
 
 class LogoutSerializer(serializers.Serializer):
     refresh_token = serializers.CharField(max_length=555)
 
-class AdminUserSerializer(serializers.ModelSerializer):
-    # This is to serializeer the User creation
-    user_id = serializers.UUIDField(read_only=True)
-    first_name = serializers.CharField(write_only=True)
-    last_name = serializers.CharField(write_only=True)
-    password = serializers.CharField(write_only=True)
-    role = serializers.CharField()
-    full_name = serializers.SerializerMethodField()
 
-    class Meta:
-        model = CustomUser
-        fields = ['user_id', 'email', 'first_name', 'last_name', 'password', "full_name",  "role"]
-        read_only_fields = ["user_id", "full_name"]
-    
-    def get_full_name(self, obj):
-        # Get the full name of the user from the User obj method
-        return obj.get_full_name()
-    
-    def validate(self, data):
-        email = data['email']
-        password = data.get('password', '')
-        role = data.get('role')
-        if password:
-            if len(password) < 7:
-                raise serializers.ValidationError("Password must be greater than 7 character")
-        if not email:
-            raise serializers.ValidationError("Email must not be empty")
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True, required=True)
+    new_password = serializers.CharField(write_only=True, required=True)
+    confirm_new_password = serializers.CharField(write_only=True, required=True)
 
-        return data
-    
-    def create(self, validated_data):
-        email = validated_data.pop("email")
-        password = validated_data.pop("password")
-        role = validated_data.pop("role")
-        # Check if the user exists before creating
-        try:
-            admin_user = CustomUser.objects.get(email=email)
-        except CustomUser.DoesNotExist:
-            # Create the user
-
-            # Set the role to match the human readbale form
-            role = role.upper()
-            admin_user = CustomUser.objects.create_superuser(email=email, password=password, role=role, **validated_data)
-
-            # Add to the admin Role Group
-            admin_group = Group.objects.get(name='Admin')
-            admin_group.user_set.add(admin_user)
+    def validate(self, attrs):
+        old_password = attrs.get('old_password')
+        new_password = attrs.get('new_password')
+        confirm_new_password = attrs.get('confirm_new_password')
+        user = self.context['request'].user
+        # Check that the old password provided matches what is in the database]
+        if not check_password(old_password, user.password):
+            raise serializers.ValidationError({"error":"Sorry Incorrect old password"})
+        # check that the new password is not he old password
+        if old_password == new_password:
+            raise serializers.ValidationError({"error":"New password must not be the old password"})
+        if new_password != confirm_new_password:
+            raise serializers.ValidationError({"error":"new Passwords does not match"})
+        if len(new_password) <= 7 and len(confirm_new_password) <= 7:
+            raise serializers.ValidationError({"error":"Sorry password must be greater than 7 characters"})
         
-        return admin_user
+        return attrs
 
-    def update(self, instance, validated_data):
-        """
-        Update and return and return just your own data
-        """
-        # Perform role check you cannt change your role once assisgned
-        default_role = instance.role
-        role_change = validated_data.get("role")
-        if default_role != role_change:
-            raise serializers.ValidationError("Sorry role changed. Only super Admin can change this")
-        else:
-            # Check if the user
-            instance.first_name = validated_data.get("first_name", instance.first_name)
-            instance.last_name = validated_data.get("last_name", instance.last_name)
-            instance.email = validated_data.get("first_name", instance.email)
-
-        instance.save()
-
-        return instance
-
-
-class AccounntSettingDisableSerializer(serializers.ModelSerializer):
-    refresh_token = serializers.CharField()
+class AccountSettingDisableSerializer(serializers.ModelSerializer):
     class Meta:
         model = AccountSettings
-        fields = ['settings_id', "is_disabled", "refresh_token"]
+        fields = ['settings_id', "is_disabled"]
         read_only_fields = ['settings_id']
+
 
 class AccountSettingsSerializer(serializers.ModelSerializer):
     class Meta:
@@ -213,7 +144,7 @@ class ProfileSerializer(serializers.ModelSerializer):
         profile_pic = validated_data.get('profile_picture', instance.profile_picture)
         instance.bio = validated_data.get('bio', instance.bio)
         instance.interests = validated_data.get('interests', instance.interests)
-        print(instance.bio)
+
         if profile_pic:
             # Only update if account_settings allows it
             if instance.account_settings.is_profile_public == False:
@@ -225,6 +156,174 @@ class ProfileSerializer(serializers.ModelSerializer):
        
         return instance
 
+
+
+"""" THIS IS FOR USER MANAGEMENT BY ADMIN SERIALIZERS """
+class AdminUserManagementSerializer(serializers.ModelSerializer):
+    # This is to serializeer the User creation
+    id = serializers.UUIDField(read_only=True)
+    first_name = serializers.CharField(write_only=True)
+    last_name = serializers.CharField(write_only=True)
+    password = serializers.CharField(write_only=True)
+    full_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CustomUser
+        fields = ['id', 'email', 'first_name', 'last_name', 'password', "full_name",  "role"]
+        read_only_fields = ["id", "full_name", "role"]
+    
+    def get_full_name(self, obj):
+        # Get the full name of the user from the User obj method
+        return obj.get_full_name()
+
+    def validate_first_name(self, value):
+        if not value.isalpha():
+            raise serializers.ValidationError("Sorry, first name must only contain letters")
+        return value
+    
+    def validate_last_name(self, value):
+        if not value.isalpha():
+            raise serializers.ValidationError("Sorry, last name must only contain letters")
+        return value
+    
+    def validate_email(self, value):
+        if not value:
+            raise serializers.ValidationError("Email must not be empty")
+        
+        if CustomUser.objects.filter(email=value).exists():
+            raise serializers.ValidationError("Sorry user with email already exists")
+        return value
+    
+    def validate_password(self, value):
+        if len(value) < 7:
+            raise serializers.ValidationError("Password must be greater than 7 character")
+        return value
+    
+    def create(self, validated_data):
+        email = validated_data.pop("email")
+        password = validated_data.pop("password")
+
+        # Check if the user exists before creating
+        try:
+            regular_user = CustomUser.objects.get(email=email)
+        except CustomUser.DoesNotExist:
+            # Create the user
+            # Set the role to match the human readbale form
+            regular_user = CustomUser.objects.create_user(email=email, password=password, **validated_data)
+            
+            # Activate regular user created by admin
+            regular_user.is_active = True
+            regular_user.save()
+            # Add to the admin Role Group
+            admin_group = Group.objects.get(name='User')
+            admin_group.user_set.add(regular_user)
+        
+        return regular_user
+
+    def update(self, instance, validated_data):
+        """
+        Update and return data
+        """
+        # Remove/pop password data as password update cannot be done here
+        password = validated_data.pop('password', '')
+
+        # Update other data information
+        instance.first_name = validated_data.get("first_name", instance.first_name)
+        instance.last_name = validated_data.get("last_name", instance.last_name)
+        instance.email = validated_data.get("email", instance.email)
+
+        instance.save()
+
+        return instance
+
+
+class AdminSerializer(serializers.ModelSerializer):
+    id = serializers.UUIDField(read_only=True)
+    first_name = serializers.CharField(write_only=True, 
+                required=True,
+                allow_blank=False,
+                error_messages={
+                    "required": "First name is required",
+                    "blank": "First name cannot be blank"}
+                    )
+    last_name = serializers.CharField(write_only=True,   
+                required=True,
+                allow_blank=False,
+                error_messages={
+                    "required": "last name is required",
+                    "blank": "Last name cannot be blank"}
+                    )
+    email = serializers.EmailField(write_only=True)
+    password = serializers.CharField(write_only=True)
+    full_name = serializers.SerializerMethodField()
+    class Meta:
+        model = CustomUser
+        fields = ['id', 'email', 'first_name', 'last_name', 'password', "full_name", "role"]
+        read_only_fields = ["id", "full_name", 'role']
+    
+    def get_full_name(self, obj):
+        # Get the full name of the user from the User obj method
+        return obj.get_full_name()
+    
+    def validate_first_name(self, value):
+        if not value.isalpha():
+            raise serializers.ValidationError("Sorry, first name must only contain letters")
+        return value
+    
+    def validate_last_name(self, value):
+        if not value.isalpha():
+            raise serializers.ValidationError("Sorry, last name must only contain letters")
+        return value
+    
+    def validate_email(self, value):
+        if not value.endswith("@admin.com"):
+            raise serializers.ValidationError("Email must be a company email (@admin.com)")
+        
+        if CustomUser.objects.filter(email=value).exists():
+            raise serializers.ValidationError("Sorry user with email already exists")
+        return value
+    
+    def validate_password(self, value):
+        # Validate the password
+        if len(value) <= 7:
+            raise serializers.ValidationError({"error":"Sorry password must be more than 7 characters"})
+        
+        return value
+    
+    def create(self, validated_data):
+        email = validated_data.pop('email')
+        password = validated_data.pop('password')
+        user = self.context['request'].user
+
+        if user.role != "ADMIN":
+            raise serializers.ValidationError({"error":"Sorry role must be an Admin to perform action"})
+        try:
+            CustomUser.objects.get(email=email)
+        except CustomUser.DoesNotExist:
+            user = CustomUser.objects.create_superuser(email=email, password=password, **validated_data)
+
+            # Add user to group ADMIN
+            admin_group = Group.objects.get(name="Admin")
+
+            # Add User to group
+            admin_group.user_set.add(user)
+        return user
+    
+    def update(self, instance, validated_data):
+        # Pop the password when updating the user information
+        password = validated_data.pop('password', '')
+
+        # Update other information
+        instance.email = validated_data.get('email', instance.email)
+        instance.first_name = validated_data.get('first_name', instance.first_name)
+        instance.last_name = validated_data.get('last_name', instance.last_name)
+
+        instance.save()
+
+        return instance
+        
+       
+"""" END - THIS IS FOR ADMIN MANAGEMENT SERIALIZERS """
 class JobCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = JobCategory

@@ -7,7 +7,7 @@ from django.conf import settings
 
 
 class CustomUserManager(BaseUserManager):
-    def create_user(self, email, first_name=None, last_name=None, password=None, phone_number=None, role=None):
+    def create_user(self, email, first_name=None, last_name=None, password=None, **extra_fields):
         if not email:
             raise ValueError("Email is required")
         
@@ -24,8 +24,8 @@ class CustomUserManager(BaseUserManager):
         user = self.model(email=self.normalize_email(email), 
                           first_name=first_name,
                           last_name=last_name,
-                          phone_number=phone_number,
-                          )
+                           **extra_fields)
+        
         # Hash the password using the default password hasher
         user.set_password(password)
         user.is_active = False
@@ -33,13 +33,16 @@ class CustomUserManager(BaseUserManager):
 
         return user
     
-    def create_superuser(self, email, first_name, last_name, password, role):
+    def create_superuser(self, email, first_name, last_name, password, **extra_fields):
+        # Set the user role to admin
+        extra_fields['role'] = "ADMIN"
+        
         user = self.create_user(
             email=email,
             first_name=first_name,
             last_name=last_name,
             password=password,
-            role=role
+            **extra_fields
         )
         user.is_staff = True
         user.is_superuser = True
@@ -69,7 +72,7 @@ class CustomUser(AbstractUser):
     updated_at = models.DateTimeField(auto_now=True)
 
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = []
+    REQUIRED_FIELDS = ['first_name', 'last_name']
 
     objects = CustomUserManager()
 
