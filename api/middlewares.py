@@ -9,7 +9,7 @@ from django.core.cache import cache
 
 
 # This gets the full file path to where we can log the requests
-full_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../requests.log'))
+full_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../logs/requests.log'))
 
 # Set up logging
 logging.basicConfig(filename=full_path,

@@ -565,9 +565,7 @@ class JobApplicationViewSet(ModelViewSet):
     def get_serializer_context(self):
         context = super().get_serializer_context()
         context['request'] = self.request  
-        context['job_post'] =  get_object_or_404(JobPost, pk=self.kwargs['post_pk']) 
-        print(self.kwargs.get('post_pk'))
-       
+        context['job_post'] =  get_object_or_404(JobPost, pk=self.kwargs['job_post_pk']) 
         return context
 
     def perform_create(self, serializer):
@@ -599,14 +597,6 @@ class JobApplicationViewSet(ModelViewSet):
         queryset = self.filter_queryset(queryset)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
-
-
-
-# JOB APPLICATION NESTED ROUTER
-# class JobApplicationNestedRouterView(ModelViewSet):
-#     queryset = JobApplication.objects.all()
-#     serializer_class = JobApplicationSerializer
-
 
 
 

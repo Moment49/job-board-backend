@@ -4,6 +4,22 @@ from django.contrib.auth.base_user import BaseUserManager
 import uuid
 from django.conf import settings
 # Create your models here.
+import logging
+import os
+
+
+# This gets the full file path to where we can log the requests
+full_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../logs/models.log'))
+# Set up logging
+logging.basicConfig(filename=full_path,
+                    format='%(asctime)s %(message)s',
+                    filemode='a')
+
+logger = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 
 class CustomUserManager(BaseUserManager):
@@ -185,11 +201,11 @@ class JobApplication(models.Model):
         
         # Check if all the values of the fields are filled
         if all(field is not None and field != "" for field in submission_fields):
-            print("Fields are all filled. mark Submitted")
             self.job_app_submission_status = "Submitted"
+            logger.info(f"Fields are all filled. marked Submitted")
         else:
             self.job_app_submission_status = 'Incomplete'
-            print("Fall check")
+            logger.info(f"Fields are not all filled. marked Incomplete")
 
 
         
@@ -206,7 +222,7 @@ class JobApplicationReview(models.Model):
     reviewed_at = models.DateTimeField(auto_now_add=False, blank=True, null=True)
     reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name="job_application_review", null=True)
     job_applicatiion_review = models.CharField(max_length=20, choices=JOB_APPLICATION_REVIEW_STATUS, default="Not Reviewed", blank=False, null=False)
-    job_app = models.ForeignKey(JobApplication, on_delete=models.CASCADE, related_name="job_application_reviews")
+    job_app = models.OneToOneField(JobApplication, on_delete=models.CASCADE, related_name="job_application_reviews")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

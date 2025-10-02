@@ -517,7 +517,6 @@ class JobApplicationSerializer(serializers.ModelSerializer):
 
         # # Save the instance after the completeness check.
         application.save()
-        # print(application)
 
         # Return the newly created application instance.
         return application
@@ -551,6 +550,7 @@ class JobApplicationReviewSerializer(serializers.ModelSerializer):
         model = JobApplicationReview
         fields = ["job_app_review_id", "reason", "reviewed_at", "reviewed_by", "job_applicatiion_review", "job_app"]
         read_only_fields = ['job_app_review_id']
+
 
     def update(self, instance, validated_data):
         # check if the application is submitted if it is then review it
