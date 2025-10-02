@@ -599,7 +599,6 @@ class JobApplicationViewSet(ModelViewSet):
         return Response(serializer.data)
 
 
-
 # JOB APLLICATION REVIEW MANAGEMENT
 class JobApplicationReviewView(APIView):
     permission_classes = [IsAuthenticated]
