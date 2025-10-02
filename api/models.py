@@ -208,8 +208,6 @@ class JobApplication(models.Model):
             logger.info(f"Fields are not all filled. marked Incomplete")
 
 
-        
-
 
 class JobApplicationReview(models.Model):
     JOB_APPLICATION_REVIEW_STATUS = [

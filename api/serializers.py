@@ -544,26 +544,24 @@ class JobApplicationSerializer(serializers.ModelSerializer):
 
 
 class JobApplicationReviewSerializer(serializers.ModelSerializer):
-    job_app =  serializers.PrimaryKeyRelatedField(queryset=JobPost.objects.all())
     reviewed_by =  serializers.PrimaryKeyRelatedField(read_only=True)
     class Meta:
         model = JobApplicationReview
         fields = ["job_app_review_id", "reason", "reviewed_at", "reviewed_by", "job_applicatiion_review", "job_app"]
-        read_only_fields = ['job_app_review_id']
+        read_only_fields = ['job_app_review_id', 'job_app']
 
 
     def update(self, instance, validated_data):
-        # check if the application is submitted if it is then review it
-        reviewed_by = validated_data.get('reviewed_by')
+        # Update fields normally
         instance.reason = validated_data.get('reason', instance.reason)
         instance.reviewed_at = validated_data.get('reviewed_at', instance.reviewed_at)
-        instance.reviewed_by = validated_data.get('reviewed_by', instance.reviewed_by)
-
         instance.job_applicatiion_review = validated_data.get('job_applicatiion_review', instance.job_applicatiion_review)
-    
+
+        # If review status changes to "Reviewed", mark the application
         if instance.job_applicatiion_review == "Reviewed":
-            # Update the application_review_status of the job application
             instance.job_app.application_review_status = True
+            instance.job_app.save()
+
         instance.save()
 
         return instance

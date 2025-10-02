@@ -33,7 +33,7 @@ urlpatterns = [
     path("auth/change-password/<str:user_pk>", change_password, name="change-password"),
     path("profile/", ProfileListUpdateView.as_view(), name="profile"),
     path('profile/<str:user_pk>/disable', UserAccountDisableView.as_view(), name='user-account-disable'),
-    path('application/<str:app_pk>/reviews/', JobApplicationReviewView.as_view(), name='application-review'),
+    path('applications/<str:job_app_pk>/reviews/<str:review_pk>', JobApplicationReviewView.as_view(), name='application-review'),
     path("", include(posts_router.urls))
 ]
 urlpatterns += router.urls

@@ -496,6 +496,17 @@ class JobPostViewSet(ModelViewSet):
     filterset_fields = ['job_category', 'job_category__job_category_type', 'job_category__job_category_name']
     search_fields = ['company_name', 'salary']
 
+    @action(detail=False, methods=['get'])
+    def reviews(self, request):
+        job_post = self.get_object()
+        if request.user.role != "ADMIN" and job_post.user != request.user:
+              return Response({"error": "Sorry you cant view this resource"}, status=status.HTTP_403_FORBIDDEN)
+        
+        reviews = JobApplicationReview.objects.filter(job_app__job_post__user=request.user)
+        serializer = JobApplicationReviewSerializer(reviews, many=True)
+        return Response({"data":serializer.data}, status=status.HTTP_200_OK)
+
+
     def perform_create(self, serializer):
         # Check if user is admin before creating
         if self.request.user.role != "ADMIN":
@@ -580,15 +591,16 @@ class JobApplicationViewSet(ModelViewSet):
         if instance.job_app_submission_status == "Submitted":
             raise PermissionDenied("You cannot delete a submitted application.")
 
-        print(instance)
         self.perform_destroy(instance)
         return Response({"message":"application deleted succesfully"},status=status.HTTP_204_NO_CONTENT)
     
     
     def list(self, request, *args, **kwargs):
         # Check if user is admin and is the job poster
-        if request.user.role == "ADMIN":
-           queryset= JobApplication.objects.filter(job_post__user=request.user, 
+        post_id = self.kwargs.get('job_post_pk')
+        job_post = get_object_or_404(JobPost, pk=post_id)
+        if request.user.role == "ADMIN" and request.user == job_post.user:
+           queryset= JobApplication.objects.filter(job_post__user=request.user, job_post=job_post,
                                           job_app_submission_status="Submitted").select_related(
                                               'job_post', 'job_post__user')
         else:
@@ -606,42 +618,64 @@ class JobApplicationReviewView(APIView):
     filterset_fields = ['job_applicatiion_review', 'reviewed_at', "job_app__field_of_study"]
 
     # Reviews for Application. Admins to have access to this view only
-    def get(self, request):
+    def get(self, request, job_app_pk, review_pk):
         if request.user.role != "ADMIN":
             return Response({"message":"Sorry you cant view this resource. Must be an admin"})
         
-         # Get all JobApplicationReviews for applications of jobs posted by this admin
-        reviews = JobApplicationReview.objects.filter(
-            job_app__job_post__user=request.user
-        ).select_related('job_app', 'job_app__job_post', 'reviewed_by')
-
+        job_app = get_object_or_404(JobApplication, job_app_id=job_app_pk)
+        
+        # Get the specific review
+        review = get_object_or_404(JobApplicationReview, job_app_review_id=review_pk, job_app=job_app)
+    
         # Serialize the reviews
-        serializer = JobApplicationReviewSerializer(reviews, many=True)
+        serializer = JobApplicationReviewSerializer(review)
+
         return Response(serializer.data)
 
-    def put(self, request):
+    def put(self, request, job_app_pk, review_pk):
        # Only admins can update reviews
         if request.user.role != "ADMIN":
-            return Response(
-                {"message": "Sorry, you can't update this resource. Must be an admin."},
-                status=403
-            )
+            return Response({"message": "Sorry, you can't update this resource. Must be an admin."},status=403)
         
-        review_id = request.data.get('job_app_review_id')
-        if not review_id:
-            return Response({"error": "review_id is required"}, status=400)
+        review = get_object_or_404(JobApplicationReview, job_app_review_id=review_pk)
 
-        try:
-            review = JobApplicationReview.objects.get(job_app_review_id=review_id)
-        except JobApplicationReview.DoesNotExist:
-            return Response({"error": "Review not found"}, status=404)
+        # Ensure the admin owns the job post for this application
+        if review.job_app.job_post.user != request.user:
+            return Response({"error": "You can only update reviews for your own job posts"}, status=403)
 
-        # Ensure the admin is the owner of the related job post
+        serializer = JobApplicationReviewSerializer(review, data=request.data, partial=False)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(reviewed_by=request.user)
+
+        message = "Review updated successfully"
+        if serializer.instance.job_applicatiion_review == "Reviewed":
+            message = "Review updated successfully and application marked as reviewed"
+            
+        return Response({"message": message,"data": serializer.data}, status=status.HTTP_200_OK)
+
+    def patch(self, request, job_app_pk, review_pk):
+       # Only admins can update reviews
+        if request.user.role != "ADMIN":
+            return Response({"message": "Sorry, you can't update this resource. Must be an admin."},status=403)
+        
+        review = get_object_or_404(JobApplicationReview, job_app_review_id=review_pk)
+
+        # Ensure the admin owns the job post for this application
         if review.job_app.job_post.user != request.user:
             return Response({"error": "You can only update reviews for your own job posts"}, status=403)
 
         serializer = JobApplicationReviewSerializer(review, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        serializer.save(reviewed_by=request.user)
 
-        return Response(serializer.data)
+        return Response({"message": "Review updated successfully","data": serializer.data}, status=status.HTTP_200_OK)
+
+    def delete(self, request, job_app_pk, review_pk):
+        if request.user.role != "ADMIN":
+            return Response({"error": "Only admins can delete this"}, status=403)
+
+        app = get_object_or_404(JobApplication, job_app_id=job_app_pk, job_post__user=request.user)
+        review = get_object_or_404(JobApplicationReview, job_app=app, job_app_review_id=review_pk)
+
+        review.delete()
+        return Response(status=204)

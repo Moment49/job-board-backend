@@ -81,7 +81,6 @@ class RequestLogMiddleware:
                     cache.set(cache_key, request_log, timeout=86400)
                 
 
-                response = self.get_response(request)
-                # Code to be execcuted after the response is returned from the view or call the next middleware
-
+        response = self.get_response(request)
+        # Code to be execcuted after the response is returned from the view or call the next middleware
         return response
