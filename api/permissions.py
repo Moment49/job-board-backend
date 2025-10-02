@@ -38,3 +38,4 @@ class AdminReadOnlyForOthers(BasePermission):
             if obj != request.user:
                 raise PermissionDenied({"error": "Sorry you dont have permission to modify or delete another admin data"})
         return True
+

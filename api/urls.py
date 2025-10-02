@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, include
 from .views import (UserRegisterView, 
                     AccountVerificationView, login_view, logout_view, change_password, AdminUserViewSet,
                     ProfileListUpdateView, UserAccountDisableView, JobCategoryViewSet, 
@@ -9,15 +9,18 @@ from rest_framework_simplejwt.views import (
     TokenRefreshSlidingView,
 )
 from rest_framework.routers import DefaultRouter
+from rest_framework_nested import routers
 
-router = DefaultRouter()
+router = routers.DefaultRouter()
 
 router.register(r'admin/users', AdminUserViewSet, basename="admins-users"),
 router.register(r'admin/admins', AdminViewSet, basename="admin-admins"),
-router.register(r'job/category', JobCategoryViewSet, basename="job-category")
-router.register(r'job-posts', JobPostViewSet, basename="job-posts")
-router.register(r'job-applications', JobApplicationViewSet, basename="job-applications")
+router.register(r'categories', JobCategoryViewSet, basename="job-category")
+router.register(r'posts', JobPostViewSet)
 
+
+posts_router = routers.NestedDefaultRouter(router, r"posts", lookup="post")
+posts_router.register(r'applications', JobApplicationViewSet, basename="post-applications")
 
 
 urlpatterns = [
@@ -29,8 +32,8 @@ urlpatterns = [
     path("auth/logout", logout_view, name="logout"),
     path("auth/change-password/<str:user_pk>", change_password, name="change-password"),
     path("profile/", ProfileListUpdateView.as_view(), name="profile"),
-    path('profile/<str:user_pk>/disable', UserAccountDisableView.as_view(), name='account-disable'),
+    path('profile/<str:user_pk>/disable', UserAccountDisableView.as_view(), name='user-account-disable'),
     path('application/reviews/', JobApplicationReviewView.as_view(), name='application-review'),
-
+    path("", include(posts_router.urls))
 ]
 urlpatterns += router.urls

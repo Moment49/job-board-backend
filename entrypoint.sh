@@ -9,7 +9,9 @@ done
 echo 'PostgreSQL started'
 
 echo 'Running migrations...'
+python manage.py makemigrations
 python manage.py migrate
+python manage.py create_role_groups
 
 # echo 'Collecting static files...'
 # python manage.py collectstatic --no-input

@@ -26,7 +26,7 @@ def notify_profile_settings_created(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=JobApplication)
 def notify_job_application_created(sender, instance, created, **kwargs):
-    if created or instance.job_application_submission == "Submitted":
+    if created or instance.job_app_submission_status == "Submitted":
         # Create the application review
         print(instance.user)
         job_app_review = JobApplicationReview.objects.create(job_app=instance, reviewed_by=instance.job_post.user)

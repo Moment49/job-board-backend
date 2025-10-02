@@ -306,15 +306,13 @@ class AdminUserViewSet(ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def disable_user(self, request, pk=None):
+
         # Check if the user making the request is an ADMIN
         if request.user.role != "ADMIN":
             return Response({"error":"Sorry you can access this resource"})
       
         # Check if the user is valid
         user = get_object_or_404(CustomUser, id=pk)
-        user.is_active = True
-        user.save()
-        print(user.is_active)
         if user.is_active:
             # Disable user
             user.profile.account_settings.is_disabled = True
@@ -326,7 +324,9 @@ class AdminUserViewSet(ModelViewSet):
             user_tokens = OutstandingToken.objects.filter(user_id=user.id)
             for token in user_tokens:
                 BlacklistedToken.objects.get_or_create(token=token)
-
+        else:
+            return Response({"detail":"Account is already been disabled"}, status=status.HTTP_400_BAD_REQUEST)
+        
         return Response({"detail": "Account has been disabled successfully."}, status=200)
     
     @action(detail=True, methods=['post'])
@@ -343,7 +343,6 @@ class AdminUserViewSet(ModelViewSet):
         user.profile.account_settings.save()
         user.save()
         return Response({"detail": "Account has been Enable successfully."}, status=200)
-    
     
 
     def get_queryset(self):
@@ -469,10 +468,9 @@ class JobCategoryViewSet(ModelViewSet):
         # Check if the user is an admin else deny access
         if self.request.user.role != "ADMIN":
             raise PermissionDenied("Sorry only admins can update categories")
-        
         self.perform_update(serializer)
 
-        return Response({"message":"category updated successfully", "data":serializer.data},status=status.HTTP_200_OK)
+        return Response({"message":f"category name `{instance.category_name}` updated successfully", "data":serializer.data},status=status.HTTP_200_OK)
     
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -485,7 +483,7 @@ class JobCategoryViewSet(ModelViewSet):
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
         serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+        return Response({"data":serializer.data}, status=status.HTTP_200_OK)
 
 
 # JOB POST MANAGEMENT
@@ -518,7 +516,7 @@ class JobPostViewSet(ModelViewSet):
             return Response({"error": "Sorry you cant update a job post that is not yours job"}, status=status.HTTP_403_FORBIDDEN)
 
         self.perform_update(serializer)
-        return Response({"message": "Job post Updated successfully","data":serializer.data}, status=status.HTTP_200_OK)
+        return Response({"message": f"Job post id `{instance.job_id}` updated successfully","data":serializer.data}, status=status.HTTP_200_OK)
     
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -537,7 +535,7 @@ class JobPostViewSet(ModelViewSet):
 
         self.perform_destroy(instance)
         return Response(
-            {"message":"Job post deleted successfully"},
+            {"message":f"Job post id `{instance.job.id}` deleted successfully"},
             status=status.HTTP_204_NO_CONTENT)
     
     def list(self, request, *args, **kwargs):
@@ -564,19 +562,24 @@ class JobApplicationViewSet(ModelViewSet):
     search_fields = ['job_application_submission']
 
     
-    def get_seializer_context(self):
+    def get_serializer_context(self):
         context = super().get_serializer_context()
         context['request'] = self.request  
+        context['job_post'] =  get_object_or_404(JobPost, pk=self.kwargs['post_pk']) 
+        print(self.kwargs.get('post_pk'))
+       
         return context
 
     def perform_create(self, serializer):
+       print(self.kwargs.get('post_pk'))
        serializer.save(user=self.request.user)
     
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         if instance.user != request.user:
             raise PermissionDenied("You cannot delete someone else's application.")
-        if instance.job_application_submission == "Submitted":
+        
+        if instance.job_app_submission_status == "Submitted":
             raise PermissionDenied("You cannot delete a submitted application.")
 
         print(instance)
@@ -588,7 +591,7 @@ class JobApplicationViewSet(ModelViewSet):
         # Check if user is admin and is the job poster
         if request.user.role == "ADMIN":
            queryset= JobApplication.objects.filter(job_post__user=request.user, 
-                                          job_application_submission_status="Submitted").select_related(
+                                          job_app_submission_status="Submitted").select_related(
                                               'job_post', 'job_post__user')
         else:
             queryset = JobApplication.objects.filter(user=request.user)
@@ -596,6 +599,14 @@ class JobApplicationViewSet(ModelViewSet):
         queryset = self.filter_queryset(queryset)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+
+
+# JOB APPLICATION NESTED ROUTER
+# class JobApplicationNestedRouterView(ModelViewSet):
+#     queryset = JobApplication.objects.all()
+#     serializer_class = JobApplicationSerializer
+
 
 
 

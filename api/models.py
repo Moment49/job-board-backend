@@ -122,7 +122,7 @@ class Profile(models.Model):
 class JobCategory(models.Model):
     JOB_CATEGORY_TYPES = [
     ("Location", "Location"),
-    ("Type", "Type"),
+    ("Work Type", "Work Type"),
     ("Industry", "Industry")
     ]
     job_category_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -159,12 +159,12 @@ class JobApplication(models.Model):
     institution_name = models.CharField(max_length=100, blank=True, null=True)
     field_of_study = models.CharField(max_length=100, blank=True, null=True)
     grade = models.DecimalField(max_digits=3, decimal_places=2, blank=True, null=True)
-    degree_Qualification = models.CharField(max_length=200, blank=True, null=True)
+    degree_qualification = models.CharField(max_length=200, blank=True, null=True)
     degree_start_date = models.DateField(blank=True, null=True)
-    deree_end_date  = models.DateField(blank=True, null=True)
-    degree_Certificate = models.ImageField(upload_to="certificates/", blank=True, null=True)
+    degree_end_date  = models.DateField(blank=True, null=True)
+    degree_certificate = models.ImageField(upload_to="certificates/", blank=True, null=True)
     availability = models.DateField(blank=True, null=True)
-    job_application_submission = models.CharField(max_length=15, choices=JOB_APPLICATION_SUBMISSION_STATUS, default="Incomplete", blank=True, null=True)
+    job_app_submission_status = models.CharField(max_length=15, choices=JOB_APPLICATION_SUBMISSION_STATUS, default="Incomplete", blank=True, null=True)
     application_review_status = models.BooleanField(default=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='job_applications')
     job_post = models.ForeignKey(JobPost, on_delete=models.SET_NULL, related_name="job_applications", null=True)
@@ -173,6 +173,27 @@ class JobApplication(models.Model):
 
     def __str__(self):
         return f"{self.job_app_id} at {self.user.email}"
+
+
+    def check_application_submitted(self):
+        # Get all fields
+        submission_fields = [self.cover_letter,
+                    self.resume_cv, self.field_of_study,
+                    self.grade, self.institution_name,
+                    self.degree_certificate, self.degree_start_date,
+                    self.degree_end_date, self.availability]
+        
+        # Check if all the values of the fields are filled
+        if all(field is not None and field != "" for field in submission_fields):
+            print("Fields are all filled. mark Submitted")
+            self.job_app_submission_status = "Submitted"
+        else:
+            self.job_app_submission_status = 'Incomplete'
+            print("Fall check")
+
+
+        
+
 
 class JobApplicationReview(models.Model):
     JOB_APPLICATION_REVIEW_STATUS = [
