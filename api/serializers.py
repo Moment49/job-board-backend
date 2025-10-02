@@ -448,14 +448,14 @@ class JobApplicationSerializer(serializers.ModelSerializer):
         end_date = data.get('degree_end_date')
         job_post = self.context['job_post']
 
-        # Rule 1: Degree start and end date check
+        # Degree start and end date check
         # Ensure that the end date is not earlier than the start date
         if start_date and end_date and end_date < start_date:
             raise serializers.ValidationError(
                 {"degree_end_date": "End date cannot be earlier than start date."}
             )
 
-        # Rule 2: Availability date check
+        # Availability date check
         # A candidate cannot set availability to a past date
         availability = data.get('availability')
         if availability and availability < now().date():
@@ -463,7 +463,7 @@ class JobApplicationSerializer(serializers.ModelSerializer):
                 {"availability": "Availability date must be today or later."}
             )
 
-        # Rule 3: Prevent multiple submissions for the same job
+        # Prevent multiple submissions for the same job
         # If the user has already submitted a completed application for this job,
         # they cannot apply again.
         existing_application = JobApplication.objects.filter(
@@ -488,13 +488,13 @@ class JobApplicationSerializer(serializers.ModelSerializer):
         job_post = self.context['job_post']
       
 
-        # Rule 1: Prevent a user from applying to their own job post.
+        # Prevent a user from applying to their own job post.
         if job_post.user == user:
             raise serializers.ValidationError(
                 {"job_post": "You cannot apply to a job you created."}
             )
 
-        # Rule 2: Prevent duplicate applications for the same job by the same user
+        # Prevent duplicate applications for the same job by the same user
         # if there’s already an *incomplete* application (they should update instead).
         existing_application = JobApplication.objects.filter(
             user=user,
