@@ -178,7 +178,7 @@ class JobApplication(models.Model):
     degree_qualification = models.CharField(max_length=200, blank=True, null=True)
     degree_start_date = models.DateField(blank=True, null=True)
     degree_end_date  = models.DateField(blank=True, null=True)
-    degree_certificate = models.ImageField(upload_to="certificates/", blank=True, null=True)
+    degree_certificate = models.FileField(upload_to="certificates/", blank=True, null=True)
     availability = models.DateField(blank=True, null=True)
     job_app_submission_status = models.CharField(max_length=15, choices=JOB_APPLICATION_SUBMISSION_STATUS, default="Incomplete", blank=True, null=True)
     application_review_status = models.BooleanField(default=False)

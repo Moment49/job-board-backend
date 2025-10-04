@@ -39,6 +39,8 @@ from rest_framework import generics, filters
 from django_ratelimit.decorators import ratelimit
 from django_filters.rest_framework import DjangoFilterBackend
 import uuid
+from .filters import JobPostFilter, JobApplicationFilter
+from .pagination import JobPostsListsPagination
 
 
 # Set the logger entry point
@@ -449,7 +451,7 @@ class AdminViewSet(ModelViewSet):
 class JobCategoryViewSet(ModelViewSet):
     queryset = JobCategory.objects.all()
     serializer_class = JobCategorySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated] 
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_fields = ['job_category_name', 'job_category_type']
     search_fields = ['job_category_type', 'job_category_name']
@@ -493,16 +495,19 @@ class JobPostViewSet(ModelViewSet):
     serializer_class = JobPostSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
-    filterset_fields = ['job_category', 'job_category__job_category_type', 'job_category__job_category_name']
-    search_fields = ['company_name', 'salary']
+    filterset_class = JobPostFilter
+    pagination_class = JobPostsListsPagination
+    search_fields = ['company_name']
 
-    @action(detail=False, methods=['get'])
-    def reviews(self, request):
+    @action(detail=True, methods=['GET'])
+    def reviews(self, request, pk=None):
         job_post = self.get_object()
         if request.user.role != "ADMIN" and job_post.user != request.user:
               return Response({"error": "Sorry you cant view this resource"}, status=status.HTTP_403_FORBIDDEN)
         
-        reviews = JobApplicationReview.objects.filter(job_app__job_post__user=request.user)
+        reviews = JobApplicationReview.objects.filter(job_app__job_post__user=request.user, 
+                                                      job_app__job_post=job_post).select_related('job_app__job_post__user',
+                                                                                                 'job_app__job_post')
         serializer = JobApplicationReviewSerializer(reviews, many=True)
         return Response({"data":serializer.data}, status=status.HTTP_200_OK)
 
@@ -558,19 +563,26 @@ class JobPostViewSet(ModelViewSet):
 
         # For Filtering Serach 
         queryset = self.filter_queryset(job_posts) 
+
+        # For Paginated data
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
         serializer = self.get_serializer(queryset, many=True)
         return Response({"data":serializer.data}, status=status.HTTP_200_OK)
 
 
 # JOB APPLICATION MANAGEMENT
 class JobApplicationViewSet(ModelViewSet):
-    # Views for All users to apply to Job Admins cannot apply to job
+    # Views for All users to apply to Job Admins/job poster who own the jobs cannot apply to job
     queryset = JobApplication.objects.all()
     serializer_class = JobApplicationSerializer
     permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
-    filterset_fields = ['application_review_status', 'job_post__job_title']
-    search_fields = ['job_application_submission']
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = JobApplicationFilter
+    
 
     
     def get_serializer_context(self):
@@ -580,7 +592,7 @@ class JobApplicationViewSet(ModelViewSet):
         return context
 
     def perform_create(self, serializer):
-       print(self.kwargs.get('post_pk'))
+       print(self.kwargs.get('job_post_pk'))
        serializer.save(user=self.request.user)
     
     def destroy(self, request, *args, **kwargs):
@@ -600,8 +612,7 @@ class JobApplicationViewSet(ModelViewSet):
         post_id = self.kwargs.get('job_post_pk')
         job_post = get_object_or_404(JobPost, pk=post_id)
         if request.user.role == "ADMIN" and request.user == job_post.user:
-           queryset= JobApplication.objects.filter(job_post__user=request.user, job_post=job_post,
-                                          job_app_submission_status="Submitted").select_related(
+           queryset= JobApplication.objects.filter(job_post__user=request.user, job_post=job_post).select_related(
                                               'job_post', 'job_post__user')
         else:
             queryset = JobApplication.objects.filter(user=request.user)
@@ -614,8 +625,6 @@ class JobApplicationViewSet(ModelViewSet):
 # JOB APLLICATION REVIEW MANAGEMENT
 class JobApplicationReviewView(APIView):
     permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
-    filterset_fields = ['job_applicatiion_review', 'reviewed_at', "job_app__field_of_study"]
 
     # Reviews for Application. Admins to have access to this view only
     def get(self, request, job_app_pk, review_pk):
@@ -637,11 +646,17 @@ class JobApplicationReviewView(APIView):
         if request.user.role != "ADMIN":
             return Response({"message": "Sorry, you can't update this resource. Must be an admin."},status=403)
         
-        review = get_object_or_404(JobApplicationReview, job_app_review_id=review_pk)
+        job_app = get_object_or_404(JobApplication, job_app_id=job_app_pk)
+
+        review = get_object_or_404(JobApplicationReview, job_app_review_id=review_pk, job_app=job_app)
 
         # Ensure the admin owns the job post for this application
         if review.job_app.job_post.user != request.user:
             return Response({"error": "You can only update reviews for your own job posts"}, status=403)
+        
+        # Check if the application has been reviewed already
+        if review.job_applicatiion_review == "Reviewed":
+            return Response({"message":"Sorry the application has been reviewed already"}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = JobApplicationReviewSerializer(review, data=request.data, partial=False)
         serializer.is_valid(raise_exception=True)
@@ -658,11 +673,17 @@ class JobApplicationReviewView(APIView):
         if request.user.role != "ADMIN":
             return Response({"message": "Sorry, you can't update this resource. Must be an admin."},status=403)
         
-        review = get_object_or_404(JobApplicationReview, job_app_review_id=review_pk)
+        job_app = get_object_or_404(JobApplication, job_app_id=job_app_pk)
+
+        review = get_object_or_404(JobApplicationReview, job_app_review_id=review_pk, job_app=job_app)
 
         # Ensure the admin owns the job post for this application
         if review.job_app.job_post.user != request.user:
             return Response({"error": "You can only update reviews for your own job posts"}, status=403)
+        
+        # Check if the application has been reviewed already
+        if review.job_applicatiion_review == "Reviewed":
+            return Response({"message":"Sorry the application has been reviewed already"}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = JobApplicationReviewSerializer(review, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)

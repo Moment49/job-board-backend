@@ -550,6 +550,7 @@ class JobApplicationReviewSerializer(serializers.ModelSerializer):
         fields = ["job_app_review_id", "reason", "reviewed_at", "reviewed_by", "job_applicatiion_review", "job_app"]
         read_only_fields = ['job_app_review_id', 'job_app']
 
+    
 
     def update(self, instance, validated_data):
         # Update fields normally
