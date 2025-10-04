@@ -62,5 +62,7 @@ def send_job_application_review_status_email(data):
     except smtplib.SMTPConnectError:
         logger.error("❌ Could not connect to the SMTP server. Check your internet connection or email service configuration.")
 
-       
-             
+
+@shared_task
+def connect_ipapi(API_KEY, ip_address):
+    ...

@@ -24,63 +24,90 @@ logger.setLevel(logging.INFO)
 
 class RequestLogMiddleware:
     def __init__(self, get_response):
-        """Initialize the get_response that will be called after the request is sent"""
+        """
+        Initialize middleware.
+        get_response is a callable (the next middleware or the view) 
+        that will be called once this middleware finishes.
+        """
         self.get_response = get_response
     
-    def __call__(self, request):
-        # Get the IP address from the request
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+
+    def get_ip_address(self, request):
+        """
+        Extract client IP address from the request headers.
+        
+        - If behind a proxy/load balancer, IP is usually in HTTP_X_FORWARDED_FOR.
+        - Otherwise, fallback to REMOTE_ADDR (direct client IP).
+        """
+        x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
         if x_forwarded_for:
+            # Take the first IP if multiple IPs are forwarded (comma-separated list)
             ip_address = x_forwarded_for.split(',')[0]
         else:
-            ip_address = request.META.get('REMOTE_ADDR')
-   
-        # Get the request path and timestamp
+            ip_address = request.META.get("REMOTE_ADDR")
+        
+        return ip_address
+    
+    def __call__(self, request):
+        """
+        Main middleware execution flow:
+        - Runs before the view
+        - Executes custom logic
+        - Calls the next middleware/view
+        - Runs after the response is generated
+        """
+        
+        # Get client IP
+        ip_address = self.get_ip_address(request)
+        
+        # Get request path and timestamp
         timestamp = datetime.now() 
-        path = request.path
+        path = request.get_full_path()
 
-        # Get geolocation data for country and city
-        # Make an API call to the Geolocation service
-        # IPGEO API KEY 
+        # --- Geolocation lookup (using ipapi API) ---
         API_KEY = settings.IP_GEOLOCATION_SETTINGS.get('BACKEND_API_KEY')
     
-        # # MAKE the requests
+       
         res = requests.get(f"http://api.ipapi.com/{ip_address}?access_key={API_KEY}")
-        # Check if the response is status code 200
+
+        # Ensure API call succeeded (implement retries for the api call - later)
         if res.status_code == 200:
             data = res.json()
             ip_address = data['ip']
             country_name = data['country_name']
             city = data['city']
 
-            # Get the IP address from the request
-
-            # Check the cache first, create a unique key that includes the ip to diferenitate each IP address
+            # Build unique cache key per IP
             cache_key =  f"ip_addr_{ip_address}"
             
             if cache.get(cache_key):
-                print("Ip gotten from cache; cache hit")
-                logger.info(f"Logged data:Ip address {ip_address} gotten from cache, succssful cache hit")
-            else:
+                # If cached, skip re-logging heavy data and just update DB
+                logger.info(f"Cache hit - IP {ip_address} data retrieved from cache.")
                 request_log = RequestLog.objects.filter(ip_address=ip_address)
                 if request_log.exists():
+                    request_log.update(country=country_name, city=city, path=path)
+
+            else:
+                # If not cached, fetch or create DB log entry
+                request_log = RequestLog.objects.filter(ip_address=ip_address)
+                if request_log.exists():
+                    # Update record if already logged before
                     request_log.update(country=country_name, city=city)
-                # Log the request path, ip_address and timestap to the file
-                    logger.info(f"Logged data updated successful - Ip address: {ip_address} request path: {path} timestamp: {timestamp}")
-
-                    # Cache the results for 24 hours
-                    cache.set(cache_key, request_log, timeout=86400)
-
+                    logger.info(f"Updated log - IP: {ip_address}, Path: {path}, Timestamp: {timestamp}")
                 else:
-                    request_log = RequestLog.objects.create(ip_address=ip_address, path=path, timestamp=timestamp)
+                    # Create a new request log entry
+                    request_log = RequestLog.objects.create(ip_address=ip_address, 
+                                                            path=path, timestamp=timestamp, 
+                                                            country=country_name, city=city)
                     request_log.save()
-                    # Log the request path, ip_address and timestap to the file
-                    logger.info(f"Logged data successful - Ip address: {ip_address} request path: {path} timestamp: {timestamp}")
+                    logger.info(f"New log created - IP: {ip_address}, Path: {path}, Timestamp: {timestamp}")
 
-                    # Cache the results for 24 hours
-                    cache.set(cache_key, request_log, timeout=86400)
+                    # Store results in cache for 1 hour (3600 seconds)
+                    cache.set(cache_key, request_log, timeout=3600)
                 
-
+         # Pass control to the next middleware/view
         response = self.get_response(request)
+
         # Code to be execcuted after the response is returned from the view or call the next middleware
         return response
+

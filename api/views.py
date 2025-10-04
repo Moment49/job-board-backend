@@ -162,6 +162,7 @@ def login_view(request):
 
             return Response({"message":"Invalid Credentials!!! user not authenticated"},status=status.HTTP_401_UNAUTHORIZED)
 
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @authentication_classes([JWTAuthentication])
@@ -181,7 +182,8 @@ def logout_view(request):
         else:
             return  Response({"message":"Bad  request - Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
 
-
+@ratelimit(key='user', rate='5/m', block=True)
+@ratelimit(key='ip', rate='1/s', block=True)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @authentication_classes([JWTAuthentication])

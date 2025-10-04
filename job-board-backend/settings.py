@@ -57,7 +57,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    # 'api.middlewares.RequestLogMiddleware',
+    'api.middlewares.RequestLogMiddleware',
 ]
 
 ROOT_URLCONF = 'job-board-backend.urls'
@@ -170,21 +170,18 @@ REST_FRAMEWORK = {
 
 
 # ACTS AS CACHE AND BROKER FOR CELERY TASKS
-# CACHES = {
-#     "default": {
-#         "BACKEND": "django_redis.cache.RedisCache",
-#         "LOCATION": env('CACHE_URL'),
-#         "OPTIONS": {
-#             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-#         }
-#     }
-# }
-
 
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
         "LOCATION": env('CACHE_URL_REDIS_CLOUD'),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    },
+    "extra": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": env('CACHE_URL'),
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
@@ -239,7 +236,6 @@ DEFAULT_FROM_EMAIL= env('DEFAULT_FROM_EMAIL')
 
 from datetime import timedelta
 
-
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=120),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
@@ -276,6 +272,7 @@ CORS_ALLOW_METHODS = (
     "POST",
     "PUT",
 )
+
 IP_GEOLOCATION_SETTINGS = {
     'BACKEND': 'django_ip_geolocation.backends.IPGeolocationAPI',
     'BACKEND_API_KEY': env('GEO_API_KEY'),
