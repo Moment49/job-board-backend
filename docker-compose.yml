@@ -47,7 +47,7 @@ services:
       CELERY_BROKER_URL: ${CELERY_BROKER_URL}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
     volumes:
-      -.:/app
+      - .:/app
     depends_on:
       - db
       - cache

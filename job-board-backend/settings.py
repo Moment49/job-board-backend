@@ -179,7 +179,7 @@ CACHES = {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
     },
-    "extra": {
+    "error": {
         "BACKEND": "django_redis.cache.RedisCache",
         "LOCATION": env('CACHE_URL'),
         "OPTIONS": {
@@ -203,35 +203,69 @@ DEFAULT_FROM_EMAIL= env('DEFAULT_FROM_EMAIL')
 
 
 # LOGGER SETTINGS
-# LOGGING = {
-#     'version': 1,
-#     'disable_existing_loggers': False,
-#     'formatters': {
-#         'verbose': {
-#             'format': '{levelname} {asctime} {name} {message}',
-#             'style': '{',
-#         },
-#         'simple': {
-#             'format': '{levelname} {message}',
-#             'style': '{',
-#         },
-#     },
-#     'handlers': {
-#         'file': {
-#             'level': 'DEBUG',
-#             'class': 'logging.FileHandler',
-#             'filename': 'debug.log',
-#             'formatter': 'verbose',
-#         }
-#     },
-#     'loggers': {
-#         'django': {
-#             'handlers': ['file'],
-#             'level': 'DEBUG',
-#             'propagate': True,
-#         },
-#     },
-# }
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {name} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'file_requests_info': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs/requests.log'),
+            'formatter': 'simple',
+        },
+        'file_models_info': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs/models.log'),
+            'formatter': 'simple',
+        },
+        'file_tasks': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs/tasks.log'),
+            'formatter': 'simple',
+        },
+         'console': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+    },
+
+    'loggers': {
+         'django': {
+            'handlers': [],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+        'job-board-backend.tasks': {
+            'handlers': ['file_tasks'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+
+        'job-board-backend.models': {
+            'handlers': ['file_models_info'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'job-board-backend.middlewares': {
+            'handlers': ['file_requests_info', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        }
+    },
+}
 
 
 from datetime import timedelta

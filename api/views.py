@@ -402,7 +402,8 @@ class AdminUserViewSet(ModelViewSet):
 
 
 class AdminViewSet(ModelViewSet):
-    """Admin View to PERFORM CRUD operations on ADMIN by an Admin
+    """
+    Admin View to PERFORM CRUD operations on ADMIN by an Admin
     """
     queryset = CustomUser.objects.all()
     serializer_class = AdminSerializer

@@ -1,26 +1,12 @@
-from django.http import HttpResponseForbidden
 from datetime import datetime
-from .models import RequestLog
 import logging
-import requests
 from django.conf import settings
 import os
 from django.core.cache import cache
+from .tasks import fetch_ip_data
 
 
-# This gets the full file path to where we can log the requests
-full_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../logs/requests.log'))
-
-# Set up logging
-logging.basicConfig(filename=full_path,
-                    format='%(asctime)s %(message)s',
-                    filemode='a')
-
-logger = logging.getLogger(__name__)
-handler = logging.StreamHandler()
-handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
+logger = logging.getLogger('job-board-backend.middlewares')
 
 class RequestLogMiddleware:
     def __init__(self, get_response):
@@ -64,50 +50,22 @@ class RequestLogMiddleware:
         timestamp = datetime.now() 
         path = request.get_full_path()
 
-        # --- Geolocation lookup (using ipapi API) ---
-        API_KEY = settings.IP_GEOLOCATION_SETTINGS.get('BACKEND_API_KEY')
-    
-       
-        res = requests.get(f"http://api.ipapi.com/{ip_address}?access_key={API_KEY}")
+        # Generate a unique cache key per IP address
+        cache_key =  f"ip_addr_{ip_address}"
+        data = cache.get(cache_key)
+        if data:
+            # If cached, avoid hitting external API and DB again (performance optimization)
+            country = data.get('country')
+            city = data.get('city')
+            logger.info(f"Cache hit - IP {ip_address} , path: {path},\
+                         timestamp: {timestamp}, country: {country}, city: {city}")
+        else:
+            # If not cached, fetch geolocation data asynchronously using Celery task
+            # The task has retries built in to handle temporary request failures
+            fetch_ip_data.delay(ip_address, path, timestamp) 
 
-        # Ensure API call succeeded (implement retries for the api call - later)
-        if res.status_code == 200:
-            data = res.json()
-            ip_address = data['ip']
-            country_name = data['country_name']
-            city = data['city']
-
-            # Build unique cache key per IP
-            cache_key =  f"ip_addr_{ip_address}"
-            
-            if cache.get(cache_key):
-                # If cached, skip re-logging heavy data and just update DB
-                logger.info(f"Cache hit - IP {ip_address} data retrieved from cache.")
-                request_log = RequestLog.objects.filter(ip_address=ip_address)
-                if request_log.exists():
-                    request_log.update(country=country_name, city=city, path=path)
-
-            else:
-                # If not cached, fetch or create DB log entry
-                request_log = RequestLog.objects.filter(ip_address=ip_address)
-                if request_log.exists():
-                    # Update record if already logged before
-                    request_log.update(country=country_name, city=city)
-                    logger.info(f"Updated log - IP: {ip_address}, Path: {path}, Timestamp: {timestamp}")
-                else:
-                    # Create a new request log entry
-                    request_log = RequestLog.objects.create(ip_address=ip_address, 
-                                                            path=path, timestamp=timestamp, 
-                                                            country=country_name, city=city)
-                    request_log.save()
-                    logger.info(f"New log created - IP: {ip_address}, Path: {path}, Timestamp: {timestamp}")
-
-                    # Store results in cache for 1 hour (3600 seconds)
-                    cache.set(cache_key, request_log, timeout=3600)
                 
-         # Pass control to the next middleware/view
+        # Pass control to the next middleware/view
         response = self.get_response(request)
-
-        # Code to be execcuted after the response is returned from the view or call the next middleware
         return response
 

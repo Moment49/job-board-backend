@@ -3,23 +3,12 @@ from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.base_user import BaseUserManager
 import uuid
 from django.conf import settings
-# Create your models here.
 import logging
-import os
 
 
-# This gets the full file path to where we can log the requests
-full_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../logs/models.log'))
-# Set up logging
-logging.basicConfig(filename=full_path,
-                    format='%(asctime)s %(message)s',
-                    filemode='a')
 
-logger = logging.getLogger(__name__)
-handler = logging.StreamHandler()
-handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
+logger = logging.getLogger('job-board-backend.models')
+
 
 
 class CustomUserManager(BaseUserManager):
@@ -74,6 +63,7 @@ class CustomUser(AbstractUser):
     ROLES = (
         ("ADMIN", "Admin"),
         ("USER", "User"),
+        ("SYSTEM", "System"),
     )
 
     # Add any additional fields if needed
