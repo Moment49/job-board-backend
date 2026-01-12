@@ -7,7 +7,7 @@ import logging
 
 
 
-logger = logging.getLogger('job-board-backend.models')
+logger = logging.getLogger('api.models')
 
 
 

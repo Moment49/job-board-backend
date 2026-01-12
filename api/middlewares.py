@@ -6,7 +6,7 @@ from django.core.cache import cache
 from .tasks import fetch_ip_data
 
 
-logger = logging.getLogger('job-board-backend.middlewares')
+logger = logging.getLogger('api.middlewares')
 
 class RequestLogMiddleware:
     def __init__(self, get_response):
@@ -49,6 +49,7 @@ class RequestLogMiddleware:
         # Get request path and timestamp
         timestamp = datetime.now() 
         path = request.get_full_path()
+        logger.info(f"Cache hit - IP {ip_address} , path: {path}")
 
         # Generate a unique cache key per IP address
         cache_key =  f"ip_addr_{ip_address}"

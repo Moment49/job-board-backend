@@ -350,6 +350,7 @@ class AdminUserViewSet(ModelViewSet):
     
 
     def get_queryset(self):
+        logger.info("All users returned")
         return CustomUser.objects.filter(role="USER")
     
     def perform_create(self, serializer):

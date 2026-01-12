@@ -170,26 +170,16 @@ REST_FRAMEWORK = {
 
 
 # ACTS AS CACHE AND BROKER FOR CELERY TASKS
-
 CACHES = {
     "default": {
-        "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": env('CACHE_URL_REDIS_CLOUD'),
-        "OPTIONS": {
-            "CLIENT_CLASS": "django_redis.client.DefaultClient",
-        }
-    },
-    "error": {
         "BACKEND": "django_redis.cache.RedisCache",
         "LOCATION": env('CACHE_URL'),
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
-    }
+    },
 }
 
-# pick which cache from the CACHES setting.
-CELERY_CACHE_BACKEND = 'default'
 
 # CELERY settings - This is the message broker that will be used to send and receive messages from the celery worker
 CELERY_BROKER_URL = env("CELERY_BROKER_URL")
@@ -203,6 +193,7 @@ DEFAULT_FROM_EMAIL= env('DEFAULT_FROM_EMAIL')
 
 
 # LOGGER SETTINGS
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -218,7 +209,7 @@ LOGGING = {
     },
     'handlers': {
         'file_requests_info': {
-            'level': 'INFO',
+            'level': 'DEBUG',
             'class': 'logging.FileHandler',
             'filename': os.path.join(BASE_DIR, 'logs/requests.log'),
             'formatter': 'simple',
@@ -230,7 +221,7 @@ LOGGING = {
             'formatter': 'simple',
         },
         'file_tasks': {
-            'level': 'INFO',
+            'level': 'DEBUG',
             'class': 'logging.FileHandler',
             'filename': os.path.join(BASE_DIR, 'logs/tasks.log'),
             'formatter': 'simple',
@@ -242,25 +233,30 @@ LOGGING = {
         },
     },
 
+    'root': {
+        'handlers': [],
+        'level': 'INFO',
+    },
+
     'loggers': {
          'django': {
             'handlers': [],
             'level': 'DEBUG',
             'propagate': True,
         },
-        'job-board-backend.tasks': {
-            'handlers': ['file_tasks'],
+        'api.tasks': {
+            'handlers': ['file_tasks', 'console'],
             'level': 'INFO',
             'propagate': False,
         },
 
-        'job-board-backend.models': {
+        'api.models': {
             'handlers': ['file_models_info'],
             'level': 'DEBUG',
             'propagate': False,
         },
-        'job-board-backend.middlewares': {
-            'handlers': ['file_requests_info', 'console'],
+        'api.middlewares': {
+            'handlers': ['file_requests_info'],
             'level': 'INFO',
             'propagate': False,
         }

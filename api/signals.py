@@ -4,8 +4,9 @@ from django.contrib.auth import get_user_model
 from .models import Profile, AccountSettings, JobApplication, JobApplicationReview
 from .tasks import send_job_application_submission_email, send_job_application_review_status_email
 from django.db import transaction
-
 import logging
+
+
 # Get an instance of a logger
 logger = logging.getLogger(__name__)
 

@@ -11,7 +11,11 @@ from django.core.cache import cache
 from .models import RequestLog
 
 
-logger = logging.getLogger('job-board-backend.tasks')
+
+logger = logging.getLogger('api.tasks')
+
+SMTP_AUTH_FAILED_MS ="❌ SMTP authentication failed. Check SendGrid API key."
+SMTP_CONN_FAILED_MSG ="❌ Could not connect to the SMTP server. Check your internet connection or email service configuration"
 
 @shared_task
 def send_verification_email(data):
@@ -28,9 +32,9 @@ def send_verification_email(data):
         return {"status": "sent"}
 
     except smtplib.SMTPAuthenticationError:
-        logger.error("❌ SMTP authentication failed. Check SendGrid API key.")
+        logger.error(f"{SMTP_AUTH_FAILED_MSG}")
     except smtplib.SMTPConnectError:
-        logger.error("❌ Could not connect to the SMTP server. Check your internet connection or email service configuration.")
+        logger.error(f"{SMTP_CONN_FAILED_MSG}")
 
 
 
@@ -47,9 +51,9 @@ def send_job_application_submission_email(data):
         logger.info(f"✅ Email queued for {data['to_email']}")
         return {"status": "sent"}
     except smtplib.SMTPAuthenticationError:
-        logger.error("❌ SMTP authentication failed. Check SendGrid API key.")
+        logger.error(f"{SMTP_AUTH_FAILED_MSG}")
     except smtplib.SMTPConnectError:
-        logger.error("❌ Could not connect to the SMTP server. Check your internet connection or email service configuration.")
+        logger.error(f"{SMTP_CONN_FAILED_MSG}")
 
 
 @shared_task
@@ -65,43 +69,42 @@ def send_job_application_review_status_email(data):
         logger.info(f"✅ Email queued for {data['to_email']}")
         return {"status": "sent"}
     except smtplib.SMTPAuthenticationError:
-        logger.error("❌ SMTP authentication failed. Check SendGrid API key.")
+         logger.error(f"{SMTP_AUTH_FAILED_MSG}")
     except smtplib.SMTPConnectError:
-        logger.error("❌ Could not connect to the SMTP server. Check your internet connection or email service configuration.")
+        logger.error(f"{SMTP_CONN_FAILED_MSG}")
 
 
-def retry_on_failure(retries, delay):
+def retry_on_failure(max_retries, countdown):
     def decorator_retry_on_failure(func):
 
         @functools.wraps(func)
         def wrapper_retry_on_failure(*args, **kwargs):
-            attempts = 0
-            backoff_factor = 2
-            while attempts < retries:
-                try:
-                    return func(*args, **kwargs)
-                except requests.exceptions.RequestException as e:
-                    attempts += 1
-                    if attempts >= retries:
-                        logger.error(f"All {retries} attempts failed. Maximum retries reached.")
-                        raise e
+            try:
+                return func(*args, **kwargs)
+            except requests.exceptions.RequestException as e:
+                retries = self.request.retries
+                if max_retries >= retries:
+                    logger.error(f"Task {self.name} failed after {max_retries} retries")
+                    raise e
+                
+                logger.warning(f"Retrying {self.name} ({retries + 1}/{max_retries}) "
+                    f"in {countdown}s due to: {exc}")
 
-                    wait = delay * (backoff_factor ** (attempts - 1))
-                    logger.info(f"Request failed: {e}. Retrying {attempts}/{retries} in {wait}s...")
-                    time.sleep(wait)
+                self.retry(countdown=countdown * (2 ** retries), exc=e)
+                   
 
         return wrapper_retry_on_failure
     return decorator_retry_on_failure
 
 
 
-@shared_task
-@retry_on_failure(retries=3, delay=2)
-def fetch_ip_data(ip_address, path, timestamp):
+@shared_task(bind=True, max_retries=3)
+@retry_on_failure(max_retries=3, countdown=3)
+def fetch_ip_data(self, ip_address, path, timestamp):
     # Call the primary geolocation API (ipapi) 
     API_KEY = settings.IP_GEOLOCATION_SETTINGS.get('BACKEND_API_KEY')
     url = f"http://api.ipapi.com/{ip_address}?access_key={API_KEY}"
-    res = requests.get(url)
+    res = requests.get(url, timeout=10)
 
     data = None # Initialize variable to store API response
 
