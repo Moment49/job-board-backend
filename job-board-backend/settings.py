@@ -226,6 +226,18 @@ LOGGING = {
             'filename': os.path.join(BASE_DIR, 'logs/tasks.log'),
             'formatter': 'simple',
         },
+        'file_app': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs/app.log'),
+            'formatter': 'simple',
+        },
+        'file_errors': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs/errors.log'),
+            'formatter': 'simple',
+        },
          'console': {
             'level': 'DEBUG',
             'class': 'logging.StreamHandler',
@@ -256,9 +268,14 @@ LOGGING = {
             'propagate': False,
         },
         'api.middlewares': {
-            'handlers': ['file_requests_info'],
+            'handlers': ['file_requests_info', 'console'],
             'level': 'INFO',
             'propagate': False,
+        },
+        'api.views': {
+            'handlers': ['file_app', 'file_errors'],
+            'level': 'INFO',
+            'propagate': True,
         }
     },
 }

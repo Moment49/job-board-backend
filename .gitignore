@@ -16,4 +16,4 @@ htmlcov
 migrations
 staticfiles
 media
-logs
+logs/

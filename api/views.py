@@ -44,7 +44,7 @@ from .pagination import JobPostsListsPagination
 
 
 # Set the logger entry point
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('api.views')
 
 CustomUser = get_user_model()
 
@@ -489,6 +489,7 @@ class JobCategoryViewSet(ModelViewSet):
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
         serializer = self.get_serializer(queryset, many=True)
+        logger.info(f"Job categories listed successfully :{serializer.data}")
         return Response({"data":serializer.data}, status=status.HTTP_200_OK)
 
 

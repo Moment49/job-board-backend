@@ -49,7 +49,7 @@ class RequestLogMiddleware:
         # Get request path and timestamp
         timestamp = datetime.now() 
         path = request.get_full_path()
-        logger.info(f"Cache hit - IP {ip_address} , path: {path}")
+        logger.info(f"Cache hit - IP {ip_address}, path: {path}, timestamp: {timestamp}")
 
         # Generate a unique cache key per IP address
         cache_key =  f"ip_addr_{ip_address}"
@@ -58,7 +58,7 @@ class RequestLogMiddleware:
             # If cached, avoid hitting external API and DB again (performance optimization)
             country = data.get('country')
             city = data.get('city')
-            logger.info(f"Cache hit - IP {ip_address} , path: {path},\
+            logger.info(f"Cache hit - IP {ip_address}, path: {path},\
                          timestamp: {timestamp}, country: {country}, city: {city}")
         else:
             # If not cached, fetch geolocation data asynchronously using Celery task

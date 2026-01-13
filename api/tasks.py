@@ -14,7 +14,7 @@ from .models import RequestLog
 
 logger = logging.getLogger('api.tasks')
 
-SMTP_AUTH_FAILED_MS ="❌ SMTP authentication failed. Check SendGrid API key."
+SMTP_AUTH_FAILED_MSG ="❌ SMTP authentication failed. Check SendGrid API key."
 SMTP_CONN_FAILED_MSG ="❌ Could not connect to the SMTP server. Check your internet connection or email service configuration"
 
 @shared_task
@@ -78,21 +78,17 @@ def retry_on_failure(max_retries, countdown):
     def decorator_retry_on_failure(func):
 
         @functools.wraps(func)
-        def wrapper_retry_on_failure(*args, **kwargs):
+        def wrapper_retry_on_failure(self, *args, **kwargs):
             try:
-                return func(*args, **kwargs)
+                return func(self, *args, **kwargs)
             except requests.exceptions.RequestException as e:
                 retries = self.request.retries
                 if max_retries >= retries:
                     logger.error(f"Task {self.name} failed after {max_retries} retries")
                     raise e
-                
-                logger.warning(f"Retrying {self.name} ({retries + 1}/{max_retries}) "
-                    f"in {countdown}s due to: {exc}")
 
                 self.retry(countdown=countdown * (2 ** retries), exc=e)
-                   
-
+                logger.warning(f"Retrying {self.name} ({retries + 1}/{max_retries}) in {countdown}s due to: {e}")
         return wrapper_retry_on_failure
     return decorator_retry_on_failure
 
@@ -106,11 +102,17 @@ def fetch_ip_data(self, ip_address, path, timestamp):
     url = f"http://api.ipapi.com/{ip_address}?access_key={API_KEY}"
     res = requests.get(url, timeout=10)
 
-    data = None # Initialize variable to store API response
+    # Initialize variables to store API response data
+    ip_address = None
+    country = None
+    city = None 
 
     # Handle successful response from ipapi ---
     if res.status_code == 200:
         data = res.json()
+        ip_address = data['ip']
+        country = data['country_name']
+        city = data['city']
 
     # Handle rate limits (HTTP 429)     
     elif res.status_code == 429:
@@ -121,14 +123,12 @@ def fetch_ip_data(self, ip_address, path, timestamp):
         try:
             res = requests.get(url, timeout=5)
             data = res.json()
+            ip_address = data['ip']
+            country = data['country']
+            city = data['city']
         except Exception as e:
             logger.error(f"Fallback to ipwho.is failed for {ip_address}: {e}")
             return None
-        
-    # Safely extract fields (supporting both APIs)    
-    ip_address = data['ip']
-    country = data['country']
-    city = data['city']
 
     # Build unique cache key per IP
     cache_key =  f"ip_addr_{ip_address}"
