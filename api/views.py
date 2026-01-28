@@ -90,6 +90,7 @@ class UserRegisterView(generics.CreateAPIView):
         return Response({"message":"user created successfully, please check your email for account activation", 
                         "data":serializer.data}, status=status.HTTP_201_CREATED)
 
+
 class AccountVerificationView(APIView):
     serializer_class = AccountVerificationSerializer
     token_param_config = openapi.Parameter('token', in_=openapi.IN_QUERY, description="Token for account verification description", type=openapi.TYPE_STRING)
@@ -111,6 +112,8 @@ class AccountVerificationView(APIView):
             return Response({"message": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
         
         return Response({"message": "Email successfully activated"}, status=status.HTTP_200_OK)
+
+
 
 @ratelimit(key='user', rate='5/m', block=True)
 @ratelimit(key='ip', rate='10/m', block=True)
@@ -182,6 +185,8 @@ def logout_view(request):
         else:
             return  Response({"message":"Bad  request - Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
 
+
+
 @ratelimit(key='user', rate='5/m', block=True)
 @ratelimit(key='ip', rate='1/s', block=True)
 @api_view(['POST'])
@@ -251,6 +256,7 @@ class UserAccountDisableView(APIView):
         """
         Disable the account from profile settings.
         Users can disable only their own account.
+        Warning: Only admins can enable user account
         """
         # check if user exists
         user_id = kwargs.get('user_pk')

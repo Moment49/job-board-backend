@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'api.apps.ApiConfig',
+    'data_pipepline.apps.DataPipelineConfig',
     'drf_yasg',
     'django_celery_beat',
     'sendgrid',
@@ -192,8 +193,11 @@ SENDGRID_SANDBOX_MODE_IN_DEBUG = False
 DEFAULT_FROM_EMAIL= env('DEFAULT_FROM_EMAIL')
 
 
-# LOGGER SETTINGS
+# SYSTEM USER DETAILS
+SYSTEM_USER_EMAIL = env('SYSTEM_USER_EMAIL')
 
+
+# LOGGER SETTINGS
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,

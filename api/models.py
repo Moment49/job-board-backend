@@ -148,11 +148,14 @@ class JobPost(models.Model):
     salary = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='job_posts')
     job_category = models.ManyToManyField(JobCategory, related_name="job_posts")
+    job_url = models.CharField(max_length=200, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.job_title} at {self.company_name}"
+
+    
 
 class JobApplication(models.Model):
     JOB_APPLICATION_SUBMISSION_STATUS = [
