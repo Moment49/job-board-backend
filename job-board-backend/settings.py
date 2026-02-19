@@ -39,7 +39,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'api.apps.ApiConfig',
-    'data_pipepline.apps.DataPipelineConfig',
+    'data_pipeline.apps.DataPipelineConfig',
     'drf_yasg',
     'django_celery_beat',
     'sendgrid',

@@ -129,7 +129,8 @@ class JobCategory(models.Model):
     JOB_CATEGORY_TYPES = [
     ("Location", "Location"),
     ("Work Type", "Work Type"),
-    ("Industry", "Industry")
+    ("Industry", "Industry"),
+    ("Employment Type", "Employment Type")
     ]
     job_category_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     job_category_name = models.CharField(max_length=45, blank=True, null=True)
@@ -142,6 +143,7 @@ class JobCategory(models.Model):
 
 class JobPost(models.Model):
     job_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    job_slug = models.SlugField(max_length=200, unique=True, blank=True, null=True)
     job_title = models.CharField(max_length=100, blank=False, null=False)
     job_description = models.TextField(blank=False, null=False)
     company_name = models.CharField(max_length=100, blank=False, null=False)
@@ -149,6 +151,7 @@ class JobPost(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='job_posts')
     job_category = models.ManyToManyField(JobCategory, related_name="job_posts")
     job_url = models.CharField(max_length=200, blank=True, null=True)
+    source = models.CharField(max_length=200, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
