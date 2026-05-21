@@ -10,7 +10,6 @@ import logging
 logger = logging.getLogger('api.models')
 
 
-
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, first_name=None, last_name=None, password=None, **extra_fields):
         if not email:

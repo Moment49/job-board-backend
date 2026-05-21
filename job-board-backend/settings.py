@@ -236,6 +236,12 @@ LOGGING = {
             'filename': os.path.join(BASE_DIR, 'logs/app.log'),
             'formatter': 'simple',
         },
+         'file_data_pipeline': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs/data_pipeline.log'),
+            'formatter': 'simple',
+        },
         'file_errors': {
             'level': 'DEBUG',
             'class': 'logging.FileHandler',
@@ -259,6 +265,11 @@ LOGGING = {
             'handlers': [],
             'level': 'DEBUG',
             'propagate': True,
+        },
+        'data_pipeline.utils.etl_process': {
+            'handlers': ['file_data_pipeline', 'console'],
+            'level': 'INFO',
+            'propagate': False,
         },
         'api.tasks': {
             'handlers': ['file_tasks', 'console'],

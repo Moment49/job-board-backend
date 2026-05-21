@@ -13,7 +13,6 @@ htmlcov
 .coverage
 .coverage.*
 *.sqlite3
-migrations
 staticfiles
 media
 logs/
