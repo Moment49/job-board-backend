@@ -25,7 +25,18 @@ def timer(func):
     return wrapper_timer
 
 
-def retry(max_retries, delay):
+
+def rate_limit(max_requests, time_window):
+    def decorator_rate_limit(func):
+
+        @functools.wraps(func)
+        def wrapper_rate_limit(*args, **kwargs)::
+            return func(*args, **kwargs)
+        
+        return wrapper_rate_limit
+    return decorator_rate_limit
+
+def retry_on_failure(max_retries, delay):
     def decorator_retry_on_failure(func):
 
         @functools.wraps(func)
@@ -55,8 +66,12 @@ def retry(max_retries, delay):
 
 
 
-@retry(max_retries=3, delay=2)
-def fetch_single_page(page_num):
+
+
+
+@retry_on_failure(max_retries=3, delay=2)
+@rate_limit(max_requests=5, time_window=60)
+def fetch_page(page_num):
     """Fetch a single page of data from the external API."""
 
     # Get the API URL from environment variables
@@ -81,7 +96,7 @@ def call_external_api():
         logger.info(f"Fetching page {page_num}")
         try:
             # Fetch the single page
-            res_data = fetch_single_page(page_num)
+            res_data = fetch_page(page_num)
 
             # Filter the data for the required fields and yield the data
             data = res_data.get('data', [])
