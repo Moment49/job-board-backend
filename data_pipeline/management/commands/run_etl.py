@@ -11,13 +11,13 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         try:
-            # call_external_api()
             print("Starting ETL process...")
             call_external_api_gen = call_external_api()
-            print(call_external_api_gen)
+            
             for data in call_external_api_gen:
                 logger.info(f"Fetched data: {data}")
-                print(data)
+            
+
             print("ETL process completed successfully.")
             self.stdout.write(self.style.SUCCESS("Successfully ran the ETL process (--dry run)"))
 

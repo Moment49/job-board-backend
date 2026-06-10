@@ -76,8 +76,9 @@ class UserRegisterView(generics.CreateAPIView):
             relativeLink=reverse('account-verification')
             absurl= ('https' if request.is_secure() else 'http') + '://'+current_site+relativeLink+ "?token=" + str(token)
             email_body = "Hi " + user.get_full_name() +'\nUse the link below to activate your account\n\n'+absurl
-            data = {'email_subject':"Verify your email Activation", "email_body":email_body, "to_email":user.email}
-
+            data = {'email_subject':"Verify your email Activation", "email_body":email_body, "to_email":user.email}  
+            logger.info(f"User `{user.get_full_name()}` registered successfully. Verification email queued for sending.")
+        
             # Send email using celery tasks
             # Ensure that user is created before sending the mail
             try:

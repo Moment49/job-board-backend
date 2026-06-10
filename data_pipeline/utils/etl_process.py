@@ -1,8 +1,9 @@
 import requests
 import os
 import logging
-import time
 import functools
+from datetime import datetime, timedelta
+import time
 
 
 logger = logging.getLogger('data_pipeline.utils.etl_process')
@@ -23,18 +24,42 @@ def timer(func):
         # Log the execution time of the call_external_api function
         logger.info(f"Execution time for {func.__name__}: {run_time:.4f} seconds")
     return wrapper_timer
+  
 
-
-
-def rate_limit(max_requests, time_window):
+def rate_limit(max_requests, time_window_secs):
     def decorator_rate_limit(func):
+        request_count = 0
+        request_timestamps = []
 
         @functools.wraps(func)
-        def wrapper_rate_limit(*args, **kwargs)::
-            return func(*args, **kwargs)
-        
+        def wrapper_rate_limit(*args, **kwargs):
+            nonlocal request_count, request_timestamps
+            current_time = datetime.now()
+            # Format as YYYY-MM-DD HH:MM:SS,milliseconds
+            request_log_timestamp = current_time.strftime("%Y-%m-%d %H:%M:%S,%f")[:-3]
+            if request_timestamps:
+                if (current_time - request_timestamps[0]) < timedelta(seconds=time_window_secs) and request_count >= max_requests:
+                    logger.info(f"Max requests reached. Please wait before making more requests. log_timestamp: {request_log_timestamp}, request_count: {request_count}")
+                    time.sleep(20)
+
+                    # Reset the request count and timestamps after the time window has passed
+                    request_count = 0
+                    request_timestamps = []
+                    print(request_count)
+
+            # Call the function and get the result
+            result = func(*args, **kwargs)
+
+            # Update the request count and timestamps
+            if request_count < max_requests:
+                request_timestamps.append(current_time)
+                request_count += 1
+
+
+            return result
         return wrapper_rate_limit
     return decorator_rate_limit
+
 
 def retry_on_failure(max_retries, delay):
     def decorator_retry_on_failure(func):
@@ -66,11 +91,8 @@ def retry_on_failure(max_retries, delay):
 
 
 
-
-
-
 @retry_on_failure(max_retries=3, delay=2)
-@rate_limit(max_requests=5, time_window=60)
+@rate_limit(max_requests=5, time_window_secs=30)
 def fetch_page(page_num):
     """Fetch a single page of data from the external API."""
 
@@ -111,11 +133,8 @@ def call_external_api():
         except Exception as e:
             logger.error(f"Unexpected error on page {page_num}: {e}")
             
-
         page_num += 1
 
-        # Add a delay between page requests to avoid hitting rate limits
-        if page_num > 1:
-            time.sleep(2)  
-       
+
+
     
