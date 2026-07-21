@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand, CommandError
-from data_pipeline.utils.etl_process import call_external_api
+from data_pipeline.utils.etl_process import extract_jobs_from_arbeitnow, transform_load_jobs
 import logging
 
 
@@ -12,10 +12,11 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         try:
             print("Starting ETL process...")
-            call_external_api_gen = call_external_api()
             
-            for data in call_external_api_gen:
-                logger.info(f"Fetched data: {data}")
+            extract_jobs = extract_jobs_from_arbeitnow()
+            for data in extract_jobs:
+                transform_data = transform_load_jobs(data)
+                logger.info(f"Transformed data: {transform_data}")
             
 
             print("ETL process completed successfully.")

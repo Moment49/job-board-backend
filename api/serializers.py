@@ -160,7 +160,7 @@ class ProfileSerializer(serializers.ModelSerializer):
 
 """" THIS IS FOR USER MANAGEMENT BY ADMIN SERIALIZERS """
 class AdminUserManagementSerializer(serializers.ModelSerializer):
-    # This is to serializeer the User creation
+    # This is to serializer the User creation
     id = serializers.UUIDField(read_only=True)
     first_name = serializers.CharField(write_only=True)
     last_name = serializers.CharField(write_only=True)
@@ -214,9 +214,10 @@ class AdminUserManagementSerializer(serializers.ModelSerializer):
             # Activate regular user created by admin
             regular_user.is_active = True
             regular_user.save()
-            # Add to the admin Role Group
-            admin_group = Group.objects.get(name='User')
-            admin_group.user_set.add(regular_user)
+
+            # Add to the User Role Group
+            user_group = Group.objects.get(name='User')
+            user_group.user_set.add(regular_user)
         
         return regular_user
 
@@ -324,6 +325,7 @@ class AdminSerializer(serializers.ModelSerializer):
         
        
 """" END - THIS IS FOR ADMIN MANAGEMENT SERIALIZERS """
+
 class JobCategorySerializer(serializers.ModelSerializer):
     job_category_name = serializers.CharField(required=True,
                 allow_blank=False,
@@ -350,7 +352,7 @@ class JobCategorySerializer(serializers.ModelSerializer):
         # Validate before that job category does not exist
         if JobCategory.objects.filter(job_category_name=job_category_name,
                                         job_category_type=job_category_type).exists():
-            raise serializers.ValidationError({"eeror":"A job category with this name and type already exists."})
+            raise serializers.ValidationError({"error":"A job category with this name and type already exists."})
         
         return attrs
     
@@ -383,13 +385,13 @@ class JobPostSerializer(serializers.ModelSerializer):
     # salary = serializers.DecimalField(required=True, max_digits=10, decimal_places=2)
     class Meta:
         model = JobPost
-        fields = ['job_id', 'job_title', 'job_description', 'company_name', 'salary', 'user', 'job_category']
-        read_only_fields = ['job_id']
+        fields = ['job_id', 'job_title', 'job_description', 'company_name', 'salary', 'user', 'job_category', 'job_slug']
+        read_only_fields = ['job_id', 'job_slug']
 
     def validate(self, attrs):
         # Check if the category exists or passed to the request
         job_category= attrs.get('job_category')
-        print(job_category)
+        
         if not job_category:
             raise serializers.ValidationError({"error":"Please select at least one job category"})
         return attrs 

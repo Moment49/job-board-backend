@@ -1,10 +1,11 @@
-from django.db import models
+from django.db import models IntegrityError, transaction
 from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.base_user import BaseUserManager
+from django.utils.text import slugify
 import uuid
 from django.conf import settings
 import logging
-
+import secrets
 
 
 logger = logging.getLogger('api.models')
@@ -142,7 +143,7 @@ class JobCategory(models.Model):
 
 class JobPost(models.Model):
     job_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    job_slug = models.SlugField(max_length=200, unique=True, blank=True, null=True)
+    job_slug = models.SlugField(max_length=200, unique=True, blank=True, null=False)
     job_title = models.CharField(max_length=100, blank=False, null=False)
     job_description = models.TextField(blank=False, null=False)
     company_name = models.CharField(max_length=100, blank=False, null=False)
@@ -156,8 +157,55 @@ class JobPost(models.Model):
 
     def __str__(self):
         return f"{self.job_title} at {self.company_name}"
-
     
+    def generate_random_number(self):
+        """ Generate a secure random numeric string of 5 or 6 digits.
+            This value is appended to the slug to reduce the chance of collisions.
+        """
+        length_of_digit = secrets.choice([5, 6])
+        random_num = "".join(str(secrets.randbelow(10)) for _ in range(length_of_digit))
+        return random_num
+
+   
+from django.utils.text import slugify
+
+
+def save(self, *args, **kwargs):
+    """
+    Automatically generate a unique slug for user-created jobs.
+
+    - If an ETL process provides a slug, it is preserved.
+    - If a user/admin creates a job without a slug, one is generated.
+    - The database is the source of truth for uniqueness.
+    """
+
+    # ETL already supplied a slug, or this is an update.
+    if self.job_slug:
+        return super().save(*args, **kwargs)
+
+    max_attempts = 10
+
+    for _ in range(max_attempts):
+
+        self.job_slug = slugify(
+            f"{self.job_title} "
+            f"{self.company_name} "
+            f"{self.generate_random_number()}"
+        )
+
+        try:
+            with transaction.atomic():
+                return super().save(*args, **kwargs)
+
+        except IntegrityError:
+            # The generated slug already exists.
+            # Generate another one and retry.
+            self.job_slug = None
+
+    raise IntegrityError(
+        "Unable to generate a unique job slug after 10 attempts."
+    )
+
 
 class JobApplication(models.Model):
     JOB_APPLICATION_SUBMISSION_STATUS = [

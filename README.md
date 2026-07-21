@@ -270,20 +270,6 @@ GET /api/categories/
 
 ---
 
-### 📄 Applications
-
-#### Apply for a Job (User only)
-
-```http
-POST /api/jobs/1/apply/
-Authorization: Bearer <access_token>
-Content-Type: application/json
-
-{
-  "resume": "https://link-to-resume.com/resume.pdf",
-  "cover_letter": "I am excited to apply for this role..."
-}
-```
 
 ---
 
